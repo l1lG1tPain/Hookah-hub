@@ -5,7 +5,8 @@ export function ProfilePage(){
     <header class="topbar"><h1>Профиль</h1></header>
     <section class="content">
       <p>Авторизация через Telegram:</p>
-      <div id="tgLogin"></div>
+      <p><button id="tgDeep" class="btn">Открыть в Telegram</button></p>
+      <div id="status"></div>
       <pre id="whoami" style="overflow:auto;"></pre>
     </section>
     <footer class="navbar">
@@ -15,24 +16,42 @@ export function ProfilePage(){
     </footer>
   `;
 
-    // вставим Telegram Login Widget
-    const script = document.createElement('script');
-    script.async = true;
-    script.src = 'https://telegram.org/js/telegram-widget.js?22';
-    script.setAttribute('data-telegram-login', 'hookah_akulka_bot'); // << замени на @без @
-    script.setAttribute('data-size', 'large');
-    // виджет сделает GET на наш эндпоинт с initData
-    script.setAttribute('data-auth-url', '/api/auth-telegram');
-    script.setAttribute('data-request-access', 'write');
-    div.querySelector('#tgLogin').append(script);
+    async function startDeepLogin(){
+        const status = div.querySelector('#status');
+        status.textContent = 'Готовим ссылку…';
+        const r = await fetch('/api/auth-start', { method:'POST' });
+        const j = await r.json().catch(()=>({}));
+        if (!j.ok) { status.textContent = 'Ошибка старта: ' + (j.error || ''); return; }
 
-    // в конце render() после вставки виджета:
-    const who = div.querySelector('#whoami');
-    try { const u = JSON.parse(localStorage.getItem('hh:user')||'null'); if (u) who.textContent = JSON.stringify(u, null, 2); } catch {}
+        // Открываем приложение Telegram
+        const href = /Android|iPhone/i.test(navigator.userAgent) ? j.tgLink : j.httpsLink;
+        window.open(href, '_blank');
 
+        status.textContent = 'Ожидаем подтверждение в Telegram…';
+        const t0 = Date.now();
+        const timer = setInterval(async () => {
+            const rr = await fetch(`/api/auth-wait?state=${j.state}`);
+            const ans = await rr.json().catch(()=>({}));
+            if (ans.ok && ans.user) {
+                clearInterval(timer);
+                localStorage.setItem('hh:user', JSON.stringify(ans.user));
+                status.textContent = 'Готово!';
+                const who = div.querySelector('#whoami');
+                who.textContent = JSON.stringify(ans.user, null, 2);
+            } else if (Date.now() - t0 > 120000) {
+                clearInterval(timer);
+                status.textContent = 'Время ожидания истекло. Попробуйте ещё раз.';
+            }
+        }, 1500);
+    }
 
-    // перехватим ответ (виджет редиректит страницу; удобнее дёрнуть вручную кнопкой — следующий шаг)
-    // На MVP можно дополнительно добавить форму input для initData и POSTом его слать.
+    div.querySelector('#tgDeep').addEventListener('click', startDeepLogin);
+
+    // Показать, если уже залогинен
+    try {
+        const u = JSON.parse(localStorage.getItem('hh:user')||'null');
+        if (u) div.querySelector('#whoami').textContent = JSON.stringify(u, null, 2);
+    } catch {}
 
     return div;
 }
