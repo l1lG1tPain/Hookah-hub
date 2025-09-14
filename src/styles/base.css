@@ -29,3 +29,13 @@ body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-
     .navbar a { color:#e6e6e6; }
     .navbar a.active { background:#1f1f24; }
 }
+
+.card { border: 1px solid #e6e6e6; border-radius: 14px; overflow: hidden; margin: 12px 0; background: #fff; }
+.card__img img { display:block; width:100%; height:auto; }
+.card__title { margin: 10px 12px; font-size: 18px; }
+.card__tags { display:flex; flex-wrap:wrap; gap:6px; padding: 0 12px 12px; }
+.tag { font-size: 12px; padding: 4px 8px; border-radius: 999px; background: #eee; }
+@media (prefers-color-scheme: dark) {
+    .card { background:#141417; border-color:#26262b; }
+    .tag { background:#1f1f24; }
+}

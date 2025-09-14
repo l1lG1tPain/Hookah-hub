@@ -25,17 +25,24 @@ export function HomePage(){
 
     async function load(type='mixes'){
         list.textContent = 'Загрузка…';
-        const r = await fetch(`/api/public-list?type=${type}&limit=20`);
-        const { ok, items, error } = await r.json();
-        if (!ok) { list.textContent = 'Ошибка: ' + error; return; }
-        if (!items.length) { list.textContent = 'Пусто'; return; }
-        list.innerHTML = items.map(it => `
-      <div class="card">
-        <div class="title">${(it.title || it.name)}</div>
-        ${it.taste_tags ? `<div class="tags">${it.taste_tags.join(', ')}</div>` : ''}
-        ${it.is_published === false ? '<span class="badge">Черновик</span>' : ''}
-      </div>
-    `).join('');
+        try {
+            const r = await fetch(`/api/public-list?type=${type}&limit=20`);
+            const { ok, items, error } = await r.json();
+            if (!ok) throw new Error(error || 'API error');
+            if (!items.length) { list.textContent = 'Пусто'; return; }
+
+            list.innerHTML = items.map(it => `
+        <article class="card">
+          <div class="card__img">
+            <img src="${it.image_url || 'https://placehold.co/600x360?text=Hookah+Hub'}" alt="">
+          </div>
+          <h3 class="card__title">${it.title || it.name}</h3>
+          ${it.taste_tags?.length ? `<div class="card__tags">${it.taste_tags.map(t=>`<span class="tag">${t}</span>`).join('')}</div>` : ''}
+        </article>
+      `).join('');
+        } catch (e) {
+            list.textContent = 'Ошибка: ' + e.message;
+        }
     }
 
     root.querySelectorAll('.tab').forEach(btn => {
@@ -45,6 +52,6 @@ export function HomePage(){
         });
     });
 
-    load('mixes');
+    load('mixes'); // дефолт
     return root;
 }

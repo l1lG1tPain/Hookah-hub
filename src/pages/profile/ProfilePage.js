@@ -22,7 +22,7 @@ export function ProfilePage(){
     script.setAttribute('data-telegram-login', 'hookah_akulka_bot'); // << замени на @без @
     script.setAttribute('data-size', 'large');
     // виджет сделает GET на наш эндпоинт с initData
-    script.setAttribute('data-auth-url', '/api/auth/telegram');
+    script.setAttribute('data-auth-url', '/api/auth-telegram');
     script.setAttribute('data-request-access', 'write');
     div.querySelector('#tgLogin').append(script);
 

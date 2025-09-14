@@ -1,4 +1,9 @@
 import { el } from '../utils/dom.js';
+import { initRouter, navigate } from './router.js';
+
+initRouter();
+window.addEventListener('hashchange', () => navigate(location.hash));
+navigate(location.hash || '#/');
 
 const app = document.getElementById('app');
 const root = el('div', { class: 'page home' });
