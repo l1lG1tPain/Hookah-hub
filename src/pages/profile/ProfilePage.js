@@ -1,237 +1,57 @@
-// netlify/functions/tg-webhook.js
-// ESM-функция Netlify
+export function ProfilePage(){
+    const div = document.createElement('div');
+    div.className = 'page profile';
+    div.innerHTML = `
+    <header class="topbar"><h1>Профиль</h1></header>
+    <section class="content">
+      <p>Авторизация через Telegram:</p>
+      <p><button id="tgDeep" class="btn">Открыть в Telegram</button></p>
+      <div id="status"></div>
+      <pre id="whoami" style="overflow:auto;"></pre>
+    </section>
+    <footer class="navbar">
+      <a href="#/">Главная</a>
+      <a href="#/favorites">Избранное</a>
+      <a href="#/profile" class="active">Профиль</a>
+    </footer>
+  `;
 
-import { createClient } from '@supabase/supabase-js';
+    async function startDeepLogin(){
+        const status = div.querySelector('#status');
+        status.textContent = 'Готовим ссылку…';
+        const r = await fetch('/api/auth-start', { method:'POST' });
+        const j = await r.json().catch(()=>({}));
+        if (!j.ok) { status.textContent = 'Ошибка старта: ' + (j.error || ''); return; }
 
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE);
+        // Открываем приложение Telegram
+        const href = /Android|iPhone/i.test(navigator.userAgent) ? j.tgLink : j.httpsLink;
+        window.open(href, '_blank');
 
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const TG_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
-const TG_FILE = `https://api.telegram.org/file/bot${BOT_TOKEN}`;
-const BRAND = '🦈 Hookah Hub';
-const BUCKET = 'images'; // бакет для аватаров
-
-/** Получаем origin сайта из входящего запроса (без env c публичным URL) */
-function getSiteOrigin(event) {
-    try {
-        const u = new URL(event.rawUrl);
-        return u.origin.replace(/\/$/, '');
-    } catch {
-        // Netlify автоматически прокидывает URL деплоя в эти переменные
-        const fallback = (process.env.URL || process.env.DEPLOY_URL || '').replace(/\/$/, '');
-        return fallback || ''; // если пусто — кнопка всё равно отработает, просто без URL
-    }
-}
-
-/** Отправка сообщения (HTML) */
-async function sendMessage(chatId, html, opts = {}) {
-    try {
-        const payload = {
-            chat_id: chatId,
-            text: html,
-            parse_mode: 'HTML',
-            ...opts,
-        };
-        await fetch(`${TG_API}/sendMessage`, {
-            method: 'POST',
-            headers: { 'content-type': 'application/json' },
-            body: JSON.stringify(payload),
-        });
-    } catch { /* глушим — отвечаем 200, чтобы Телега не ретраила */ }
-}
-
-/** Простая «обёртка» над методами Telegram API */
-async function tg(method, body) {
-    const res = await fetch(`${TG_API}/${method}`, {
-        method: body ? 'POST' : 'GET',
-        headers: body ? { 'content-type': 'application/json' } : undefined,
-        body: body ? JSON.stringify(body) : undefined,
-    });
-    return res.json();
-}
-
-/** Скачивает фото профиля через Telegram API и кладёт в Supabase Storage; возвращает public URL или null */
-async function fetchAvatarAndStore(tgId) {
-    const photos = await tg('getUserProfilePhotos', { user_id: tgId, limit: 1 });
-    if (!photos?.ok || photos.result.total_count === 0) return null;
-
-    const sizes = photos.result.photos[0];
-    const biggest = sizes[sizes.length - 1];
-    const fileInfo = await tg('getFile', { file_id: biggest.file_id });
-    if (!fileInfo?.ok) return null;
-
-    const filePath = fileInfo.result.file_path;
-    const imgRes = await fetch(`${TG_FILE}/${filePath}`);
-    if (!imgRes.ok) return null;
-
-    const buffer = Buffer.from(await imgRes.arrayBuffer());
-    const path = `avatars/${tgId}.jpg`;
-
-    try { await supabase.storage.from(BUCKET).remove([path]); } catch {}
-    const up = await supabase.storage.from(BUCKET).upload(path, buffer, {
-        contentType: 'image/jpeg',
-        upsert: true,
-    });
-    if (up.error) return null;
-
-    const { data } = supabase.storage.from(BUCKET).getPublicUrl(path);
-    return data?.publicUrl || null;
-}
-
-/** Обрабатывает deep-link: /start login_<state> */
-async function handleLoginStart(msg, state, profileUrl) {
-    const chatId = msg.chat.id;
-    const tg = msg.from;
-    const tgId = tg.id;
-
-    // 1) проверим state
-    const { data: login, error: e1 } = await supabase
-        .from('login_states')
-        .select('*')
-        .eq('state', state)
-        .single();
-
-    if (e1 || !login || login.status !== 'new') {
-        await sendMessage(
-            chatId,
-            `${BRAND}\n\n❌ Сессия не найдена или уже использована.\n\nОткрой профиль на сайте и начни вход заново:`,
-            profileUrl
-                ? { reply_markup: { inline_keyboard: [[{ text: 'Открыть профиль', url: profileUrl }]] } }
-                : undefined
-        );
-        return 'invalid';
+        status.textContent = 'Ожидаем подтверждение в Telegram…';
+        const t0 = Date.now();
+        const timer = setInterval(async () => {
+            const rr = await fetch(`/api/auth-wait?state=${j.state}`);
+            const ans = await rr.json().catch(()=>({}));
+            if (ans.ok && ans.user) {
+                clearInterval(timer);
+                localStorage.setItem('hh:user', JSON.stringify(ans.user));
+                status.textContent = 'Готово!';
+                const who = div.querySelector('#whoami');
+                who.textContent = JSON.stringify(ans.user, null, 2);
+            } else if (Date.now() - t0 > 120000) {
+                clearInterval(timer);
+                status.textContent = 'Время ожидания истекло. Попробуйте ещё раз.';
+            }
+        }, 1500);
     }
 
-    // 2) апсерт пользователя (+ попробуем подтянуть аватар)
-    const name = tg.first_name || tg.username || `user_${tgId}`;
+    div.querySelector('#tgDeep').addEventListener('click', startDeepLogin);
 
-    let avatarUrl = null;
+    // Показать, если уже залогинен
     try {
-        const existing = await supabase
-            .from('users')
-            .select('id, avatar_url')
-            .eq('tg_id', tgId)
-            .maybeSingle();
-        if (!existing.data || !existing.data.avatar_url) {
-            avatarUrl = await fetchAvatarAndStore(tgId);
-        } else {
-            avatarUrl = existing.data.avatar_url;
-        }
+        const u = JSON.parse(localStorage.getItem('hh:user')||'null');
+        if (u) div.querySelector('#whoami').textContent = JSON.stringify(u, null, 2);
     } catch {}
 
-    const { data: user, error: e2 } = await supabase
-        .from('users')
-        .upsert(
-            { tg_id: tgId, name, avatar_url: avatarUrl ?? null },
-            { onConflict: 'tg_id' }
-        )
-        .select()
-        .single();
-
-    if (e2) {
-        await sendMessage(chatId, `${BRAND}\n\n⚠️ Внутренняя ошибка. Попробуйте ещё раз позже.`);
-        return 'error';
-    }
-
-    // 3) отмечаем state = ok
-    await supabase
-        .from('login_states')
-        .update({ tg_id: tgId, user_id: user.id, status: 'ok' })
-        .eq('state', state);
-
-    // 4) красиво ответим
-    await sendMessage(
-        chatId,
-        `${BRAND}\n\n✅ <b>Вход выполнен</b>\n\nМожете вернуться в браузер — профиль уже разблокирован.`,
-        profileUrl
-            ? { reply_markup: { inline_keyboard: [[{ text: 'Открыть профиль', url: profileUrl }]] } }
-            : undefined
-    );
-
-    return 'ok';
+    return div;
 }
-
-/** Ответ на простой /start (без payload) */
-async function handleStartPlain(msg, profileUrl) {
-    const chatId = msg.chat.id;
-    await sendMessage(
-        chatId,
-        `${BRAND}\n\nПривет! Я помогу войти в приложение и сохранять ваши миксы.\n\n` +
-        `Чтобы войти:\n1) Откройте профиль на сайте\n2) Нажмите «Открыть в Telegram»\n3) Подтвердите вход здесь\n\n` +
-        `После подтверждения вернитесь в браузер — вы будете залогинены.`,
-        profileUrl
-            ? { reply_markup: { inline_keyboard: [[{ text: 'Открыть профиль', url: profileUrl }]] } }
-            : undefined
-    );
-}
-
-/** /help */
-async function handleHelp(msg, profileUrl) {
-    const chatId = msg.chat.id;
-    await sendMessage(
-        chatId,
-        `${BRAND}\n\n<b>Помощь</b>\n\n` +
-        `• Вход в приложение — через кнопку «Открыть в Telegram» на странице профиля\n` +
-        `• Избранное и оценки — в приложении\n` +
-        `• Вопросы/идеи — смело пишите разработчику 👨‍💻`,
-        profileUrl
-            ? { reply_markup: { inline_keyboard: [[{ text: 'Открыть профиль', url: profileUrl }]] } }
-            : undefined
-    );
-}
-
-export const handler = async (event) => {
-    try {
-        // (Опционально) жёсткая проверка секрета вебхука
-        const secret = process.env.TG_WEBHOOK_SECRET;
-        if (secret) {
-            const got = event.headers['x-telegram-bot-api-secret-token'];
-            if (got !== secret) return { statusCode: 200, body: 'ok' };
-        }
-
-        if (event.httpMethod !== 'POST') {
-            return { statusCode: 200, body: 'ok' };
-        }
-
-        const origin = getSiteOrigin(event);
-        const profileUrl = origin ? `${origin}/#/profile` : null;
-
-        const update = JSON.parse(event.body || '{}');
-        const msg = update.message || update.edited_message;
-        if (!msg || !msg.text) return { statusCode: 200, body: 'ok' };
-
-        const raw = msg.text.trim();
-        const [cmd, payload] = raw.split(/\s+/, 2);
-
-        if (cmd === '/start' && payload?.startsWith('login_')) {
-            const state = payload.slice('login_'.length);
-            await handleLoginStart(msg, state, profileUrl);
-            return { statusCode: 200, body: 'ok' };
-        }
-
-        if (cmd === '/start') {
-            await handleStartPlain(msg, profileUrl);
-            return { statusCode: 200, body: 'ok' };
-        }
-
-        if (cmd === '/help') {
-            await handleHelp(msg, profileUrl);
-            return { statusCode: 200, body: 'ok' };
-        }
-
-        await sendMessage(
-            msg.chat.id,
-            `${BRAND}\n\nЯ сейчас отвечаю только на команды:\n` +
-            `• /start — начать\n` +
-            `• /help — помощь\n\n` +
-            `Чтобы войти — откройте профиль на сайте.`,
-            profileUrl
-                ? { reply_markup: { inline_keyboard: [[{ text: 'Открыть профиль', url: profileUrl }]] } }
-                : undefined
-        );
-
-        return { statusCode: 200, body: 'ok' };
-    } catch {
-        return { statusCode: 200, body: 'ok' };
-    }
-};

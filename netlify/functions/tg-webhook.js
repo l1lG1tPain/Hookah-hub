@@ -11,14 +11,15 @@ const TG_FILE = `https://api.telegram.org/file/bot${BOT_TOKEN}`;
 const BRAND = '🦈 Hookah Hub';
 const BUCKET = 'images'; // бакет для аватаров
 
-/** Получаем origin сайта из входящего запроса (без env) */
+/** Получаем origin сайта из входящего запроса (без env c публичным URL) */
 function getSiteOrigin(event) {
     try {
         const u = new URL(event.rawUrl);
-        return u.origin; // напр. https://hookahhub.netlify.app
+        return u.origin.replace(/\/$/, '');
     } catch {
-        // запасной вариант, если вдруг rawUrl недоступен
-        return process.env.URL || process.env.DEPLOY_URL || 'https://hookahhub.netlify.app';
+        // Netlify автоматически прокидывает URL деплоя в эти переменные
+        const fallback = (process.env.URL || process.env.DEPLOY_URL || '').replace(/\/$/, '');
+        return fallback || ''; // если пусто — кнопка всё равно отработает, просто без URL
     }
 }
 
@@ -36,9 +37,7 @@ async function sendMessage(chatId, html, opts = {}) {
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify(payload),
         });
-    } catch {
-        // глушим — Телеге ок отвечать 200, чтобы не было ретраев
-    }
+    } catch { /* глушим — отвечаем 200, чтобы Телега не ретраила */ }
 }
 
 /** Простая «обёртка» над методами Telegram API */
@@ -96,11 +95,9 @@ async function handleLoginStart(msg, state, profileUrl) {
         await sendMessage(
             chatId,
             `${BRAND}\n\n❌ Сессия не найдена или уже использована.\n\nОткрой профиль на сайте и начни вход заново:`,
-            {
-                reply_markup: {
-                    inline_keyboard: [[{ text: 'Открыть профиль', url: profileUrl }]],
-                },
-            }
+            profileUrl
+                ? { reply_markup: { inline_keyboard: [[{ text: 'Открыть профиль', url: profileUrl }]] } }
+                : undefined
         );
         return 'invalid';
     }
@@ -146,7 +143,9 @@ async function handleLoginStart(msg, state, profileUrl) {
     await sendMessage(
         chatId,
         `${BRAND}\n\n✅ <b>Вход выполнен</b>\n\nМожете вернуться в браузер — профиль уже разблокирован.`,
-        { reply_markup: { inline_keyboard: [[{ text: 'Открыть профиль', url: profileUrl }]] } }
+        profileUrl
+            ? { reply_markup: { inline_keyboard: [[{ text: 'Открыть профиль', url: profileUrl }]] } }
+            : undefined
     );
 
     return 'ok';
@@ -160,7 +159,9 @@ async function handleStartPlain(msg, profileUrl) {
         `${BRAND}\n\nПривет! Я помогу войти в приложение и сохранять ваши миксы.\n\n` +
         `Чтобы войти:\n1) Откройте профиль на сайте\n2) Нажмите «Открыть в Telegram»\n3) Подтвердите вход здесь\n\n` +
         `После подтверждения вернитесь в браузер — вы будете залогинены.`,
-        { reply_markup: { inline_keyboard: [[{ text: 'Открыть профиль', url: profileUrl }]] } }
+        profileUrl
+            ? { reply_markup: { inline_keyboard: [[{ text: 'Открыть профиль', url: profileUrl }]] } }
+            : undefined
     );
 }
 
@@ -173,7 +174,9 @@ async function handleHelp(msg, profileUrl) {
         `• Вход в приложение — через кнопку «Открыть в Telegram» на странице профиля\n` +
         `• Избранное и оценки — в приложении\n` +
         `• Вопросы/идеи — смело пишите разработчику 👨‍💻`,
-        { reply_markup: { inline_keyboard: [[{ text: 'Открыть профиль', url: profileUrl }]] } }
+        profileUrl
+            ? { reply_markup: { inline_keyboard: [[{ text: 'Открыть профиль', url: profileUrl }]] } }
+            : undefined
     );
 }
 
@@ -191,7 +194,7 @@ export const handler = async (event) => {
         }
 
         const origin = getSiteOrigin(event);
-        const profileUrl = `${origin}/#/profile`;
+        const profileUrl = origin ? `${origin}/#/profile` : null;
 
         const update = JSON.parse(event.body || '{}');
         const msg = update.message || update.edited_message;
@@ -222,7 +225,9 @@ export const handler = async (event) => {
             `• /start — начать\n` +
             `• /help — помощь\n\n` +
             `Чтобы войти — откройте профиль на сайте.`,
-            { reply_markup: { inline_keyboard: [[{ text: 'Открыть профиль', url: profileUrl }]] } }
+            profileUrl
+                ? { reply_markup: { inline_keyboard: [[{ text: 'Открыть профиль', url: profileUrl }]] } }
+                : undefined
         );
 
         return { statusCode: 200, body: 'ok' };
