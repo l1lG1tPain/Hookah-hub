@@ -13,3 +13,6 @@
   port = 8888
   targetPort = 5173
   functions = "netlify/functions"
+
+[build.environment]
+  NODE_VERSION = "22"
