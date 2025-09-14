@@ -1,0 +1,31 @@
+:root { color-scheme: dark light; }
+* { box-sizing: border-box; }
+html, body, #app { height: 100%; }
+body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+
+.page { min-height: 100%; padding-bottom: 64px; } /* под место под нижний бар */
+.topbar { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; }
+.topbar h1 { margin:0; font-size: 28px; }
+.tabs { display:flex; gap:8px; padding:0 16px 8px; }
+.tab { padding:8px 12px; border-radius:12px; border:1px solid transparent; background:#eee; cursor:pointer; }
+.tab.active { background:#ddd; }
+
+.content { padding: 0 16px 80px; }
+
+.navbar {
+    position: fixed; left:0; right:0; bottom:0;
+    display:flex; justify-content:space-around; gap:16px;
+    padding:12px 16px; border-top:1px solid #ddd; background:#fff;
+}
+.navbar a { text-decoration:none; color:#333; padding:8px 10px; border-radius:10px; }
+.navbar a.active { background:#eee; }
+
+/* тёмная тема по системным настройкам (потом заменим на явные темы) */
+@media (prefers-color-scheme: dark) {
+    body { background:#0f0f12; color:#f2f2f2; }
+    .tab { background:#1f1f24; }
+    .tab.active { background:#2a2a30; }
+    .navbar { background:#141417; border-top-color:#26262b; }
+    .navbar a { color:#e6e6e6; }
+    .navbar a.active { background:#1f1f24; }
+}
