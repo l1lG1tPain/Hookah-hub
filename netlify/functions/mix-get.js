@@ -1,32 +1,54 @@
 import { createClient } from '@supabase/supabase-js';
-const supaAnon = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+const supa = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE);
 
-export const handler = async (event) => {
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export async function handler(event) {
     try {
-        const id = new URL(event.rawUrl).searchParams.get('id');
-        if (!id) return { statusCode: 400, body: JSON.stringify({ ok:false, error:'id required' }) };
+        const id = (event.queryStringParameters?.id || '').trim();
+        if (!UUID_RE.test(id)) {
+            return res(400, { ok:false, error:'bad id' });
+        }
 
-        const { data: mix, error } = await supaAnon
-            .from('mixes').select('*').eq('id', id).single();
-        if (error || !mix) return { statusCode: 404, body: JSON.stringify({ ok:false, error:'not found' }) };
+        const { data: m, error: e1 } = await supa.from('mixes').select('*').eq('id', id).maybeSingle();
+        if (e1) throw e1;
+        if (!m || !m.is_published) return res(404, { ok:false, error:'not found' });
 
-        const { data: ingredients } = await supaAnon
-            .from('mix_ingredients')
-            .select('percent, custom_title, tobaccos(name:tobacco_name, brands(name:brand_name))')
-            .eq('mix_id', id).order('pos', { ascending:true });
+        const { data: ing, error: e2 } = await supa
+            .from('mix_ingredients_api')
+            .select('brand,tobacco,percent,pos,custom_title')
+            .eq('mix_id', id)
+            .order('pos', { ascending: true });
+        if (e2) throw e2;
 
-        const norm = (ingredients||[]).map(r => ({
-            percent: r.percent,
-            custom_title: r.custom_title,
-            tobacco_name: r?.tobaccos?.name || null,
-            brand_name: r?.tobaccos?.brands?.name || null
-        }));
+        const { data: agg, error: e3 } = await supa.rpc('mix_rating_aggregate', { p_mix_id: id });
+        if (e3) throw e3;
 
-        const { data: agg } = await supaAnon.rpc('mix_rating_aggregate', { p_mix_id: id }).single().catch(()=>({ data:null }));
-        // ↑ сделай SQL-функцию/вьюху позже; временно можно вернуть пустые счётчики
+        const mix = {
+            id: m.id,
+            name: m.title,
+            cover_url: m.image_url,
+            tags: m.taste_tags || [],
+            description: m.description || '',
+            is_published: m.is_published,
+            created_at: m.created_at,
+            updated_at: m.updated_at,
+            ingredients: (ing || []).map(r => ({
+                brand: r.brand,
+                tobacco: r.tobacco ?? r.custom_title ?? '—',
+                percent: r.percent,
+                pos: r.pos
+            })),
+            ratings: agg || {}
+        };
 
-        return { statusCode: 200, body: JSON.stringify({ ok:true, mix: { ...mix, ingredients: norm }, ratings: agg || {} }) };
+        // >>> ключевая строка: теперь как ждёт фронт
+        return res(200, { ok:true, mix });
     } catch (e) {
-        return { statusCode: 500, body: JSON.stringify({ ok:false, error:String(e) }) };
+        return res(500, { ok:false, error:String(e) });
     }
-};
+}
+
+function res(code, body){
+    return { statusCode: code, headers:{ 'content-type':'application/json; charset=utf-8' }, body: JSON.stringify(body) };
+}

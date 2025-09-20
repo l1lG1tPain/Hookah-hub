@@ -1,45 +1,66 @@
 import { createClient } from '@supabase/supabase-js';
-const supabaseAnon = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_ANON_KEY);
+const supa = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE);
 
-export const handler = async (event) => {
+export async function handler(event) {
     try {
-        const url = new URL(event.rawUrl);
-        const type  = url.searchParams.get('type') || 'mixes'; // mixes|tobaccos
-        const limit = Math.min(parseInt(url.searchParams.get('limit') || '50',10), 100);
-        const q     = (url.searchParams.get('q') || '').trim();
-        const brands= (url.searchParams.get('brands')||'').split(',').filter(Boolean);
-        const tags  = (url.searchParams.get('tags')||'').split(',').filter(Boolean);
-        const sort  = url.searchParams.get('sort') || 'new';  // new|top
+        const qp = event.queryStringParameters || {};
+        const type = (qp.type || 'mixes').toLowerCase(); // 'mixes' | 'tobaccos'
+        const q = (qp.q || '').trim();
+        const brands = (qp.brands || '').split(',').map(s => s.trim()).filter(Boolean);
+        const tags = (qp.tags || '').split(',').map(s => s.trim()).filter(Boolean);
+        const sort = (qp.sort || 'new').toLowerCase(); // 'new' | 'top'
+        const limit = Math.min(Number(qp.limit || 50), 100);
 
-        let query = (type === 'tobaccos')
-            ? supabaseAnon.from('tobaccos').select('*')
-            : supabaseAnon.from('mixes').select('*').eq('is_published', true);
+        if (type === 'mixes') {
+            let req = supa.from('mixes_with_stats').select('*').eq('is_published', true);
 
-        if (q) {
-            // простая фильтрация по названию (потом можно расширить до полнотекстового)
-            query = (type === 'tobaccos') ? query.ilike('name', `%${q}%`) : query.ilike('name', `%${q}%`);
-        }
-        if (brands.length) {
-            query = (type === 'tobaccos')
-                ? query.in('brand_id', brands)
-                : query.in('author_id', brands); // при необходимости поменяешь поле под бренды в миксах
-        }
-        if (tags.length) {
-            const arrayColumn = (type === 'tobaccos') ? 'taste_tags' : 'tags';
-            query = query.contains(arrayColumn, tags);
-        }
-        if (sort === 'top') {
-            // предполагается вьюха/колонка c score/votes (добавишь позже). Пока сортируем по created_at.
-            query = query.order('created_at', { ascending:false });
-        } else {
-            query = query.order('created_at', { ascending:false });
+            if (q) req = req.ilike('title', `%${q}%`);
+            if (tags.length) req = req.contains('taste_tags', tags);
+
+            if (sort === 'top') {
+                req = req.order('votes', { ascending: false })
+                    .order('avg_score', { ascending: false })
+                    .order('created_at', { ascending: false });
+            } else {
+                req = req.order('created_at', { ascending: false });
+            }
+
+            req = req.limit(limit);
+            const { data, error } = await req;
+            if (error) throw error;
+
+            const items = data.map(x => ({
+                id: x.id,
+                name: x.title,
+                cover_url: x.image_url,
+                tags: x.taste_tags || [],
+                description: x.description || '',
+                votes: x.votes || 0,
+                avg_score: x.avg_score
+            }));
+
+            return ok(items);
         }
 
-        const { data, error } = await query.limit(limit);
+        // tobaccos
+        let req = supa.from('tobaccos_api').select('*');
+        if (q) req = req.ilike('name', `%${q}%`);
+        if (brands.length) req = req.in('brand_name', brands);
+        if (tags.length) req = req.contains('tags', tags);
+
+        const { data, error } = await req.order('created_at', { ascending: false }).limit(limit);
         if (error) throw error;
 
-        return { statusCode: 200, body: JSON.stringify({ ok:true, items: data }) };
+        return ok(data);
     } catch (e) {
-        return { statusCode: 500, body: JSON.stringify({ ok:false, error:String(e) }) };
+        return { statusCode: 500, body: JSON.stringify({ ok: false, error: String(e) }) };
     }
-};
+}
+
+function ok(items) {
+    return {
+        statusCode: 200,
+        headers: { 'content-type': 'application/json; charset=utf-8' },
+        body: JSON.stringify({ ok: true, items })
+    };
+}
