@@ -119,3 +119,10 @@ body {
 /* -------- Utilities -------- */
 .muted { color: var(--muted); }
 .hidden { display:none !important; }
+
+
+/* base.css (добавь в конец) */
+.ingredients-list { display: grid; gap: 8px; margin: 8px 0 24px; }
+.ingredient-row { display: grid; grid-template-columns: 1fr auto; align-items: center; }
+.ingredient-left { font-weight: 500; }
+.ingredient-right { font-variant-numeric: tabular-nums; }

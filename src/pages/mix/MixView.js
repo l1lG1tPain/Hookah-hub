@@ -45,45 +45,70 @@ export function MixView(){
 
     async function load(){
         const r = await fetch(`/api/mix-get?id=${encodeURIComponent(id)}`);
-        const { ok, mix, ratings } = await r.json();
-        if (!ok) { root.querySelector('#hero').textContent = 'Ошибка'; return; }
+        const payload = await r.json();
+        if (!payload?.ok || !payload.mix) {
+            root.querySelector('#hero').textContent = 'Ошибка';
+            return;
+        }
 
+        const mix = payload.mix;
+
+        // HERO + название
         root.querySelector('#hero').innerHTML = `
       <img src="${mix.cover_url || 'https://placehold.co/1200x600?text=Hookah+Hub'}" style="width:100%; border-radius:12px;">
       <h2>${mix.name}</h2>
     `;
-        const tags = mix.tags || [];
-        root.querySelector('#tags').innerHTML = tags.length ? `<div class="card__tags" style="padding:8px 0;">${tags.map(t=>`<span class="tag">${t}</span>`).join('')}</div>` : '';
 
-        // состав
-        const ing = mix.ingredients || [];
+        // Теги
+        const tags = mix.tags || [];
+        root.querySelector('#tags').innerHTML = tags.length
+            ? `<div class="card__tags" style="padding:8px 0;">${tags.map(t=>`<span class="tag">${t}</span>`).join('')}</div>`
+            : '';
+
+        // Состав (делаем "лейбл": custom_title || 'brand tobacco')
+        const ing = (mix.ingredients || []).map(x => ({
+            ...x,
+            label: x.custom_title || [x.brand, x.tobacco].filter(Boolean).join(' ')
+        }));
         root.querySelector('#ingredients').innerHTML = ing.length ? `
       <h3>Состав</h3>
       <div style="display:grid; grid-template-columns:1fr auto; gap:8px;">
-        ${ing.map(x=>`<div>${x.brand_name ? `${x.brand_name} ` : ''}${x.tobacco_name || x.custom_title || ''}</div><div>${x.percent}%</div>`).join('')}
+        ${ing.map(x=>`
+          <div>${x.label || '—'}</div>
+          <div>${x.percent}%</div>
+        `).join('')}
       </div>
     ` : '';
 
+        // Описание
         root.querySelector('#desc').textContent = mix.description || 'Подробного описания нет';
 
-        // чипсы оценок
+        // ЧИПСЫ ОЦЕНОК (рейтинги теперь внутри mix.ratings)
+        const ratings = mix.ratings || {};
         const counts = {
-            5: ratings?.score5 || 0,
-            4: ratings?.score4 || 0,
-            3: ratings?.score3 || 0,
-            2: ratings?.score2 || 0,
-            1: ratings?.score1 || 0,
+            5: ratings.excellent || 0,
+            4: ratings.good || 0,
+            3: ratings.ok || 0,
+            2: ratings.bad || 0,
+            1: ratings.notgood || 0,
         };
         const colors = ratingColors(counts);
-        const entries = [[5,'Отлично','💯'],[4,'Хорошо','🔥'],[3,'Пойдёт','😎'],[2,'Плохо','🙂'],[1,'Не очень','😐']];
+        const entries = [
+            [5,'Отлично','💯'],
+            [4,'Хорошо','🔥'],
+            [3,'Пойдёт','😎'],
+            [2,'Плохо','🙂'],
+            [1,'Не очень','😐']
+        ];
         const total = Object.values(counts).reduce((a,b)=>a+b,0);
 
         root.querySelector('#ratings').innerHTML = entries.map(([k,label,emoji]) => {
             const cnt = counts[k] || 0;
-            const style = (total && (colors[k])) ? `style="color:${colors[k]};"` : '';
+            const style = (total && colors[k]) ? `style="color:${colors[k]};"` : '';
             return `<button class="rate" data-score="${k}">${emoji} ${label} ${cnt ? `<span ${style}>${cnt}</span>` : ''}</button>`;
         }).join('');
 
+        // Голосование
         root.querySelector('#ratings').onclick = async (e) => {
             const btn = e.target.closest('.rate'); if (!btn) return;
             const user = getCurrentUser(); if (!user) return alert('Войдите для оценки');
@@ -96,14 +121,27 @@ export function MixView(){
             await load(); // перезагрузим счётчики
         };
 
+        // Поделиться (используем x.label)
         root.querySelector('#share').onclick = async () => {
-            const text = `Hookah Hub — Микс: «${mix.name}»\nВкусовые теги: ${(mix.tags||[]).join(', ') || '—'}\n` +
-                (ing.length ? `Состав:\n${ing.map(x=>`• ${(x.brand_name?x.brand_name+' ':'')}${x.tobacco_name||x.custom_title} — ${x.percent}%`).join('\n')}\n` : '') +
-                `Описание: ${mix.description || '—'}\n\nПопробуй и отметь оценку 😉`;
-            if (navigator.share) { try { await navigator.share({ text }); } catch {} }
-            else { await navigator.clipboard.writeText(text); alert('Скопировано'); }
+            const text =
+                `Hookah Hub — Микс: «${mix.name}»\n` +
+                `Вкусовые теги: ${(mix.tags || []).join(', ') || '—'}\n` +
+                (ing.length
+                    ? `Состав:\n${ing.map(x => `• ${x.label || '—'} — ${x.percent}%`).join('\n')}\n`
+                    : '') +
+                `Описание: ${mix.description || '—'}\n\n` +
+                `Попробуй и не забудь поставить оценку 😉`;
+
+            if (navigator.share) {
+                try { await navigator.share({ text }); }
+                catch (e) { console.warn('Share cancelled', e); }
+            } else {
+                await navigator.clipboard.writeText(text);
+                alert('Скопировано');
+            }
         };
     }
+
     load();
     return root;
 }
