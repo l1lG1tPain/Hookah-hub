@@ -3,7 +3,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build && node build-sw.mjs",
+    "build": "vite build && node scripts/build-sw.mjs",
     "preview": "vite preview",
     "netlify:dev": "netlify dev"
   },
