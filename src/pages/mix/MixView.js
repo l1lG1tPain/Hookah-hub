@@ -1,3 +1,4 @@
+// src/pages/mix/MixView.js
 import { el } from '../../utils/dom.js';
 import { getCurrentUser } from '../../app/state.js';
 
@@ -23,10 +24,14 @@ export function MixView(){
     const id = params.get('id');
 
     root.innerHTML = `
-    <header class="topbar"><button id="back">←</button><h1>Микс</h1><button id="favBtn">★</button></header>
+    <header class="topbar">
+      <button id="back">←</button>
+      <h1>Микс</h1>
+      <button id="favBtn" title="В избранное">🤍</button>
+    </header>
     <section class="content">
       <div id="hero"></div>
-      <div id="ratings" style="display:flex; gap:8px; padding:12px 0;"></div>
+      <div id="ratings" style="display:flex; gap:8px; padding:12px 0; flex-wrap:wrap;"></div>
       <div id="tags"></div>
       <div id="ingredients"></div>
       <h3>Описание</h3>
@@ -43,63 +48,69 @@ export function MixView(){
 
     root.querySelector('#back').onclick = () => history.back();
 
+    let mix = null;
+    let favored = false;
+
+    function paintFav(){
+        root.querySelector('#favBtn').textContent = favored ? '❤️' : '🤍';
+    }
+
+    async function checkFav(){
+        const user = getCurrentUser();
+        if (!user) return;
+        try{
+            const r = await fetch('/api/favorites-list?tab=mixes', { headers: { 'x-tg-id': String(user.tg_id) } });
+            const j = await r.json();
+            if (j?.ok && Array.isArray(j.items)) favored = j.items.some(x => x.id === id);
+        }catch{}
+        paintFav();
+    }
+
     async function load(){
         const r = await fetch(`/api/mix-get?id=${encodeURIComponent(id)}`);
-        const payload = await r.json();
-        if (!payload?.ok || !payload.mix) {
-            root.querySelector('#hero').textContent = 'Ошибка';
-            return;
-        }
+        const data = await r.json();
+        if (!data?.ok) { root.querySelector('#hero').textContent = 'Ошибка'; return; }
 
-        const mix = payload.mix;
+        mix = data.mix;
 
-        // HERO + название
+        // hero
         root.querySelector('#hero').innerHTML = `
       <img src="${mix.cover_url || 'https://placehold.co/1200x600?text=Hookah+Hub'}" style="width:100%; border-radius:12px;">
       <h2>${mix.name}</h2>
     `;
 
-        // Теги
+        // tags
         const tags = mix.tags || [];
         root.querySelector('#tags').innerHTML = tags.length
             ? `<div class="card__tags" style="padding:8px 0;">${tags.map(t=>`<span class="tag">${t}</span>`).join('')}</div>`
             : '';
 
-        // Состав (делаем "лейбл": custom_title || 'brand tobacco')
-        const ing = (mix.ingredients || []).map(x => ({
-            ...x,
-            label: x.custom_title || [x.brand, x.tobacco].filter(Boolean).join(' ')
-        }));
+        // ingredients
+        const ing = mix.ingredients || [];
         root.querySelector('#ingredients').innerHTML = ing.length ? `
       <h3>Состав</h3>
       <div style="display:grid; grid-template-columns:1fr auto; gap:8px;">
         ${ing.map(x=>`
-          <div>${x.label || '—'}</div>
+          <div>${x.brand ? x.brand + ' ' : ''}${x.tobacco}</div>
           <div>${x.percent}%</div>
         `).join('')}
       </div>
     ` : '';
 
-        // Описание
+        // description
         root.querySelector('#desc').textContent = mix.description || 'Подробного описания нет';
 
-        // ЧИПСЫ ОЦЕНОК (рейтинги теперь внутри mix.ratings)
-        const ratings = mix.ratings || {};
+        // ratings chips — поддерживаем оба формата (score5..score1 ИЛИ excellent..notgood)
+        const rAgg = mix.ratings || {};
         const counts = {
-            5: ratings.excellent || 0,
-            4: ratings.good || 0,
-            3: ratings.ok || 0,
-            2: ratings.bad || 0,
-            1: ratings.notgood || 0,
+            5: (rAgg.score5 ?? rAgg.excellent) || 0,
+            4: (rAgg.score4 ?? rAgg.good) || 0,
+            3: (rAgg.score3 ?? rAgg.ok) || 0,
+            2: (rAgg.score2 ?? rAgg.bad) || 0,
+            1: (rAgg.score1 ?? rAgg.notgood) || 0,
         };
         const colors = ratingColors(counts);
-        const entries = [
-            [5,'Отлично','💯'],
-            [4,'Хорошо','🔥'],
-            [3,'Пойдёт','😎'],
-            [2,'Плохо','🙂'],
-            [1,'Не очень','😐']
-        ];
+        const entries = [[5,'Отлично','💯'],[4,'Хорошо','🔥'],[3,'Пойдёт','😎'],[2,'Плохо','🙂'],[1,'Не очень','😐']];
         const total = Object.values(counts).reduce((a,b)=>a+b,0);
 
         root.querySelector('#ratings').innerHTML = entries.map(([k,label,emoji]) => {
@@ -108,7 +119,7 @@ export function MixView(){
             return `<button class="rate" data-score="${k}">${emoji} ${label} ${cnt ? `<span ${style}>${cnt}</span>` : ''}</button>`;
         }).join('');
 
-        // Голосование
+        // rate click
         root.querySelector('#ratings').onclick = async (e) => {
             const btn = e.target.closest('.rate'); if (!btn) return;
             const user = getCurrentUser(); if (!user) return alert('Войдите для оценки');
@@ -118,28 +129,41 @@ export function MixView(){
                 headers: { 'content-type':'application/json', 'x-tg-id': String(user.tg_id) },
                 body: JSON.stringify({ mix_id: id, score })
             });
-            await load(); // перезагрузим счётчики
+            await load(); // обновим счётчики
         };
 
-        // Поделиться (используем x.label)
+        // share
         root.querySelector('#share').onclick = async () => {
+            const ing = mix.ingredients || [];
             const text =
                 `Hookah Hub — Микс: «${mix.name}»\n` +
                 `Вкусовые теги: ${(mix.tags || []).join(', ') || '—'}\n` +
                 (ing.length
-                    ? `Состав:\n${ing.map(x => `• ${x.label || '—'} — ${x.percent}%`).join('\n')}\n`
+                    ? `Состав:\n${ing.map(x =>
+                        `• ${(x.brand ? x.brand + ' ' : '')}${x.tobacco || x.custom_title || '—'} — ${x.percent}%`
+                    ).join('\n')}\n`
                     : '') +
                 `Описание: ${mix.description || '—'}\n\n` +
-                `Попробуй и не забудь поставить оценку 😉`;
+                `Попробуй и отметь оценку 😉`;
 
-            if (navigator.share) {
-                try { await navigator.share({ text }); }
-                catch (e) { console.warn('Share cancelled', e); }
-            } else {
-                await navigator.clipboard.writeText(text);
-                alert('Скопировано');
-            }
+            if (navigator.share) { try { await navigator.share({ text }); } catch {} }
+            else { await navigator.clipboard.writeText(text); alert('Скопировано'); }
         };
+
+        // fav toggle (сердечко)
+        root.querySelector('#favBtn').onclick = async () => {
+            const user = getCurrentUser();
+            if (!user) return alert('Войдите, чтобы добавлять в избранное');
+            const rr = await fetch('/api/favorites-toggle', {
+                method: 'POST',
+                headers: { 'content-type':'application/json', 'x-tg-id': String(user.tg_id) },
+                body: JSON.stringify({ item_type: 'mix', item_id: id })
+            });
+            const jj = await rr.json();
+            if (jj?.ok) { favored = jj.favored; paintFav(); }
+        };
+
+        await checkFav();
     }
 
     load();
