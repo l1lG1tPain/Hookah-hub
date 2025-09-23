@@ -8,7 +8,7 @@ export const handler = async (event) => {
 
         const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE);
 
-        // 1) генерим одноразовый state
+        // 1) одноразовый state
         const state = crypto.randomBytes(16).toString('hex');
 
         // 2) кладём в login_states со статусом 'new'
@@ -18,10 +18,11 @@ export const handler = async (event) => {
 
         if (insErr) throw insErr;
 
-        // 3) готовим глубокие ссылки
-        const bot = process.env.TELEGRAM_BOT_USERNAME; // типа "my_hookahhub_bot"
-        const tgLink = `tg://resolve?domain=${bot}&start=${state}`;
-        const httpsLink = `https://t.me/${bot}?start=${state}`;
+        // 3) дип-линки (ВАЖНО: payload с префиксом login_)
+        const bot = process.env.TELEGRAM_BOT_USERNAME; // "my_hookahhub_bot"
+        const payload = `login_${state}`;
+        const tgLink = `tg://resolve?domain=${bot}&start=${payload}`;
+        const httpsLink = `https://t.me/${bot}?start=${payload}`;
 
         return resp(200, { ok: true, state, tgLink, httpsLink });
     } catch (e) {

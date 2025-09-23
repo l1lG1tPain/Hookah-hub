@@ -1,23 +1,37 @@
 // netlify/functions/profile-name-change.js
 import { createClient } from '@supabase/supabase-js';
-const supa = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE);
 
 export const handler = async (event) => {
     try {
-        const tgId = event.headers['x-tg-id'];
-        if (!tgId) return { statusCode: 401, body: JSON.stringify({ ok:false, error:'unauthorized' }) };
+        if (event.httpMethod !== 'POST') return json(405, { ok: false });
+
+        const token = event.headers['x-session'] || event.headers['X-Session'];
+        if (!token) return json(401, { ok: false });
+
         const { name } = JSON.parse(event.body || '{}');
-        if (!name || name.trim().length < 2) return { statusCode: 400, body: JSON.stringify({ ok:false, error:'bad name' }) };
+        if (!name || String(name).trim().length < 2) return json(400, { ok: false, error: 'bad name' });
 
-        const { data: u } = await supa.from('users').select('*').eq('tg_id', tgId).single();
-        if (!u) return { statusCode: 404, body: JSON.stringify({ ok:false, error:'user not found' }) };
-        if (u.name_changed) return { statusCode: 400, body: JSON.stringify({ ok:false, error:'already changed' }) };
+        const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE);
 
-        const { data, error } = await supa.from('users').update({ name, name_changed: true }).eq('tg_id', tgId).select().single();
-        if (error) throw error;
+        const { data: sess } = await supabase
+            .from('sessions')
+            .select('user_id, expires_at')
+            .eq('token', token)
+            .maybeSingle();
+        if (!sess || new Date(sess.expires_at).getTime() < Date.now()) return json(401, { ok: false });
 
-        return { statusCode: 200, body: JSON.stringify({ ok:true, user: data }) };
-    } catch (e) {
-        return { statusCode: 500, body: JSON.stringify({ ok:false, error:String(e) }) };
+        const { error: uErr } = await supabase
+            .from('users')
+            .update({ name: String(name).trim() })
+            .eq('id', sess.user_id);
+        if (uErr) return json(500, { ok: false });
+
+        return json(200, { ok: true });
+    } catch {
+        return json(500, { ok: false });
     }
 };
+
+function json(status, body) {
+    return { statusCode: status, headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) };
+}
