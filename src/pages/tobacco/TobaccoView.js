@@ -1,6 +1,6 @@
 // src/pages/tobacco/TobaccoView.js
 import { el } from '../../utils/dom.js';
-import { getCurrentUser } from '../../app/state.js';
+import { getSession, authHeaders } from '../../app/state.js';
 
 function colorFor(k){ return ({5:'green',4:'orange',3:'gold',2:'brown',1:'red'})[k] || 'black'; }
 function ratingColors(counts){
@@ -18,27 +18,26 @@ export function TobaccoView(){
     const id = params.get('id');
 
     root.innerHTML = `
-  <header class="topbar">
-    <button id="back">←</button>
-    <h1>Табак</h1>
-    <button id="favBtn" class="fav-btn" title="В избранное"><span>🤍</span></button>
-  </header>
-  <section class="content">
-    <div id="hero"></div>
-    <div id="ratings" style="display:flex; gap:8px; padding:12px 0;"></div>
-    <div id="meta"></div>
-    <div id="tags"></div>
-    <div class="info muted" style="margin-top:8px;">Оцените табак и добавьте в избранное, чтобы не потерять.</div>
-    <p><button id="share">Поделиться</button></p>
-  </section>
-  <footer class="navbar">
-    <a href="#/">Главная</a>
-    <a href="#/favorites">Избранное</a>
-    <a href="#/profile">Профиль</a>
-  </footer>
+    <header class="topbar">
+      <button id="back">←</button>
+      <h1>Табак</h1>
+      <button id="favBtn" class="fav-btn" title="В избранное"><span>🤍</span></button>
+    </header>
+    <section class="content">
+      <div id="hero"></div>
+      <div id="ratings" style="display:flex; gap:8px; padding:12px 0;"></div>
+      <div id="meta"></div>
+      <div id="tags"></div>
+      <div class="info muted" style="margin-top:8px;">Оцените табак и добавьте в избранное, чтобы не потерять.</div>
+      <p><button id="share">Поделиться</button></p>
+    </section>
+    <footer class="navbar">
+      <a href="#/">Главная</a>
+      <a href="#/favorites">Избранное</a>
+      <a href="#/profile">Профиль</a>
+    </footer>
   `;
 
-    // локальный стиль для сердечка
     const style = document.createElement('style');
     style.textContent = `
     .fav-btn{
@@ -62,9 +61,9 @@ export function TobaccoView(){
     }
 
     async function checkFav(){
-        const user = getCurrentUser(); if (!user) return;
+        const token = getSession(); if (!token) return;
         try{
-            const r = await fetch('/api/favorites-list?tab=tobaccos', { headers: { 'x-tg-id': String(user.tg_id) } });
+            const r = await fetch('/api/favorites-list?tab=tobaccos', { headers: { ...authHeaders() } });
             const j = await r.json();
             if (j?.ok) favored = j.items.some(x => x.id === id);
         }catch{}
@@ -77,7 +76,7 @@ export function TobaccoView(){
         tobacco = await r.json();
 
         root.querySelector('#hero').innerHTML = `
-      <img src="${tobacco.cover_url || 'https://placehold.co/1200x600?text=Hookah+Hub'}" style="width:100%; border-radius:12px;">
+      <img src="${tobacco.cover_url || 'https://placehold.co/1200x600?text=Hookah+Hub'}" style="width:100%; border-radius:12px;" loading="lazy" decoding="async">
       <h2>${tobacco.name}</h2>
     `;
 
@@ -111,12 +110,12 @@ export function TobaccoView(){
         // Клик по оценке
         root.querySelector('#ratings').onclick = async (e)=>{
             const btn = e.target.closest('.rate'); if (!btn) return;
-            const user = getCurrentUser(); if (!user) return alert('Войдите для оценки');
+            const token = getSession(); if (!token) return alert('Войдите для оценки');
             const map = {5:'excellent',4:'good',3:'ok',2:'bad',1:'notgood'};
             const score = map[Number(btn.dataset.score)];
             await fetch('/api/tobaccos-rate', {
                 method:'POST',
-                headers:{ 'content-type':'application/json', 'x-tg-id': String(user.tg_id) },
+                headers:{ 'content-type':'application/json', ...authHeaders() },
                 body: JSON.stringify({ tobacco_id: id, score })
             });
             await load(); // обновим счётчики
@@ -134,10 +133,10 @@ export function TobaccoView(){
 
         // fav toggle
         root.querySelector('#favBtn').onclick = async ()=>{
-            const user = getCurrentUser(); if (!user) return alert('Войдите, чтобы добавить в избранное');
+            const token = getSession(); if (!token) return alert('Войдите, чтобы добавить в избранное');
             const rr = await fetch('/api/favorites-toggle', {
                 method:'POST',
-                headers:{ 'content-type':'application/json', 'x-tg-id': String(user.tg_id) },
+                headers:{ 'content-type':'application/json', ...authHeaders() },
                 body: JSON.stringify({ item_type:'tobacco', item_id:id })
             });
             const jj = await rr.json(); if (jj?.ok){ favored = jj.favored; paintFav(); }

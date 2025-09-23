@@ -1,6 +1,6 @@
 // src/pages/favorites/FavoritesPage.js
 import { el } from '../../utils/dom.js';
-import { getCurrentUser } from '../../app/state.js';
+import { getSession, authHeaders } from '../../app/state.js';
 
 export function FavoritesPage(){
     const root = el('div', { class: 'page favorites' });
@@ -25,7 +25,6 @@ export function FavoritesPage(){
     </footer>
   `;
 
-    // локальные стили страницы
     const style = document.createElement('style');
     style.textContent = `
     .tabs{ display:flex; gap:8px; margin-bottom:12px; }
@@ -34,7 +33,6 @@ export function FavoritesPage(){
 
     .fav-list{ display:flex; flex-direction:column; gap:10px; }
 
-    /* строка списка */
     .fav-item{
       position:relative; display:grid; grid-template-columns: 1fr auto;
       gap:10px; padding:12px; border:1px solid var(--border); border-radius:14px;
@@ -56,7 +54,6 @@ export function FavoritesPage(){
     .heart.active{ background:#ffdee4; border-color:#ff99ad; }
     .heart span{ font-size:18px; }
 
-    /* красивая пустая заглушка */
     .empty{
       display:flex; flex-direction:column; align-items:center; justify-content:center;
       gap:10px; padding:48px 12px; color:var(--text-muted, #777);
@@ -113,8 +110,8 @@ export function FavoritesPage(){
 
     async function load(){
         list.innerHTML = 'Загрузка…';
-        const user = getCurrentUser();
-        if (!user){
+        const token = getSession();
+        if (!token){
             list.innerHTML = `
         <div class="empty">
           <div class="emoji">🦈</div>
@@ -124,7 +121,7 @@ export function FavoritesPage(){
         }
 
         try{
-            const r = await fetch(`/api/favorites-list?tab=${currentTab}`, { headers: { 'x-tg-id': String(user.tg_id) } });
+            const r = await fetch(`/api/favorites-list?tab=${currentTab}`, { headers: { ...authHeaders() } });
             const j = await r.json();
             const items = j?.items || [];
             list.innerHTML = '';
@@ -151,7 +148,7 @@ export function FavoritesPage(){
         const btn = e.target.closest('.heart'); if (!btn) return;
         e.preventDefault(); e.stopPropagation();
 
-        const user = getCurrentUser(); if (!user) return alert('Войдите через Telegram');
+        const token = getSession(); if (!token) return alert('Войдите через Telegram');
         const type = btn.dataset.type, id = btn.dataset.id;
 
         // мгновенно прячем из списка
@@ -161,7 +158,7 @@ export function FavoritesPage(){
         try{
             const r = await fetch('/api/favorites-toggle', {
                 method: 'POST',
-                headers: { 'content-type':'application/json', 'x-tg-id': String(user.tg_id) },
+                headers: { 'content-type':'application/json', ...authHeaders() },
                 body: JSON.stringify({ item_type: type, item_id: id })
             });
             const j = await r.json();

@@ -1,29 +1,25 @@
-import { el } from '../utils/dom.js';
-import { initRouter, navigate } from './router.js';
+// main.js
+import { startRouter } from './router.js';
 
-initRouter();
-window.addEventListener('hashchange', () => navigate(location.hash));
-navigate(location.hash || '#/');
+function boot() {
+    // гарантируем наличие контейнера
+    if (!document.getElementById('app')) {
+        const app = document.createElement('div');
+        app.id = 'app';
+        document.body.appendChild(app);
+    }
 
-const app = document.getElementById('app');
-const root = el('div', { class: 'page home' });
-root.innerHTML = `
-  <header class="topbar">
-    <h1>Hookah Hub</h1>
-    <button id="searchBtn">🔎</button>
-  </header>
-  <nav class="tabs">
-    <button class="tab active" data-tab="mixes">Миксы</button>
-    <button class="tab" data-tab="tobaccos">Табаки</button>
-  </nav>
-  <section class="content">
-    <div class="chips" id="brandChips"></div>
-    <div class="list" id="cardsList">Здесь будут карточки…</div>
-  </section>
-  <footer class="navbar">
-    <a href="#/">Главная</a>
-    <a href="#/favorites">Избранное</a>
-    <a href="#/profile">Профиль</a>
-  </footer>
-`;
-app.replaceChildren(root);
+    // нормализуем пустой hash, чтобы сразу был маршрут "/"
+    if (!location.hash) {
+        location.replace('#/');
+    }
+
+    // стартуем роутер (первичный рендер + подписка на hashchange)
+    startRouter();
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot);
+} else {
+    boot();
+}

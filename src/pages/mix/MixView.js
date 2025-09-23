@@ -1,6 +1,6 @@
 // src/pages/mix/MixView.js
 import { el } from '../../utils/dom.js';
-import { getCurrentUser } from '../../app/state.js';
+import { getSession, authHeaders } from '../../app/state.js';
 
 function colorFor(key){
     return { 5:'green', 4:'orange', 3:'gold', 2:'brown', 1:'red' }[key] || 'black';
@@ -56,10 +56,10 @@ export function MixView(){
     }
 
     async function checkFav(){
-        const user = getCurrentUser();
-        if (!user) return;
+        const token = getSession();
+        if (!token) return;
         try{
-            const r = await fetch('/api/favorites-list?tab=mixes', { headers: { 'x-tg-id': String(user.tg_id) } });
+            const r = await fetch('/api/favorites-list?tab=mixes', { headers: { ...authHeaders() } });
             const j = await r.json();
             if (j?.ok && Array.isArray(j.items)) favored = j.items.some(x => x.id === id);
         }catch{}
@@ -75,7 +75,7 @@ export function MixView(){
 
         // hero
         root.querySelector('#hero').innerHTML = `
-      <img src="${mix.cover_url || 'https://placehold.co/1200x600?text=Hookah+Hub'}" style="width:100%; border-radius:12px;">
+      <img src="${mix.cover_url || 'https://placehold.co/1200x600?text=Hookah+Hub'}" style="width:100%; border-radius:12px;" loading="lazy" decoding="async">
       <h2>${mix.name}</h2>
     `;
 
@@ -122,11 +122,11 @@ export function MixView(){
         // rate click
         root.querySelector('#ratings').onclick = async (e) => {
             const btn = e.target.closest('.rate'); if (!btn) return;
-            const user = getCurrentUser(); if (!user) return alert('Войдите для оценки');
+            const token = getSession(); if (!token) return alert('Войдите для оценки');
             const score = Number(btn.dataset.score);
             await fetch('/api/mixes-rate', {
                 method: 'POST',
-                headers: { 'content-type':'application/json', 'x-tg-id': String(user.tg_id) },
+                headers: { 'content-type':'application/json', ...authHeaders() },
                 body: JSON.stringify({ mix_id: id, score })
             });
             await load(); // обновим счётчики
@@ -152,11 +152,10 @@ export function MixView(){
 
         // fav toggle (сердечко)
         root.querySelector('#favBtn').onclick = async () => {
-            const user = getCurrentUser();
-            if (!user) return alert('Войдите, чтобы добавлять в избранное');
+            const token = getSession(); if (!token) return alert('Войдите, чтобы добавлять в избранное');
             const rr = await fetch('/api/favorites-toggle', {
                 method: 'POST',
-                headers: { 'content-type':'application/json', 'x-tg-id': String(user.tg_id) },
+                headers: { 'content-type':'application/json', ...authHeaders() },
                 body: JSON.stringify({ item_type: 'mix', item_id: id })
             });
             const jj = await rr.json();

@@ -2,21 +2,44 @@
 import { createClient } from '@supabase/supabase-js';
 const supa = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE);
 
+async function getUserId(event) {
+    // сначала пробуем по сессии
+    const session = event.headers['x-session'];
+    if (session) {
+        const { data, error } = await supa
+            .from('sessions')
+            .select('user_id')
+            .eq('token', session)
+            .maybeSingle();
+        if (data?.user_id) return data.user_id;
+    }
+
+    // fallback на старый вариант (tg_id)
+    const tgId = event.headers['x-tg-id'];
+    if (tgId) {
+        const { data, error } = await supa
+            .from('users')
+            .select('id')
+            .eq('tg_id', tgId)
+            .maybeSingle();
+        if (data?.id) return data.id;
+    }
+
+    return null;
+}
+
 export async function handler(event){
     try{
-        const tgId = event.headers['x-tg-id'];
-        if (!tgId) return res(401, { ok:false, error:'unauthorized' });
+        const userId = await getUserId(event);
+        if (!userId) return res(401, { ok:false, error:'unauthorized' });
 
         const tab = (event.queryStringParameters?.tab || 'mixes').toLowerCase(); // mixes | tobaccos
-
-        const { data: user, error: eU } = await supa.from('users').select('id').eq('tg_id', tgId).maybeSingle();
-        if (eU || !user) return res(404, { ok:false, error:'user not found' });
 
         if (tab === 'mixes'){
             const { data, error } = await supa
                 .from('favorites')
                 .select('created_at, item_id')
-                .eq('user_id', user.id)
+                .eq('user_id', userId)
                 .eq('item_type', 'mix')
                 .order('created_at', { ascending:false });
             if (error) throw error;
@@ -52,7 +75,7 @@ export async function handler(event){
         const { data, error } = await supa
             .from('favorites')
             .select('created_at, item_id')
-            .eq('user_id', user.id)
+            .eq('user_id', userId)
             .eq('item_type', 'tobacco')
             .order('created_at', { ascending:false });
         if (error) throw error;
