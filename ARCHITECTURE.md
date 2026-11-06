@@ -6,7 +6,7 @@
 > и синхронизируйте его копию в claude.ai Project «Hookah hub» (doc `claude/ARCHITECTURE.md`).
 > Порядок обновления — в разделе [«Как поддерживать этот файл»](#как-поддерживать-этот-файл).
 
-_Последнее обновление: 2026-11-06 (каталог: 17 брендов, 1207 табаков, 78 миксов; починка деплоя на Netlify; загрузка каталога без лимита в 1000 строк)._
+_Последнее обновление: 2026-11-07 (фронт выводит описание и линейку табака, коммит `0c3ce5d`; описания у всех 1291 табака, DarkSide Sabotage/Shot/Xperience, колонки `description`/`line_name` в `tobaccos_api`; ранее: починка деплоя на Netlify, загрузка каталога без лимита в 1000 строк)._
 
 ---
 
@@ -18,7 +18,7 @@ _Последнее обновление: 2026-11-06 (каталог: 17 бре�
 - смотреть каталог миксов и табаков: поиск, фильтры по вкусу и бренду, сортировка;
 - открывать «Топ» со взвешенным рейтингом (как IMDb Top);
 - открывать карточку микса: состав с процентами, распределение оценок, автор;
-- открывать карточку табака: оценки и «Миксы с этим табаком»;
+- открывать карточку табака: бренд · линейка, описание, оценки и «Миксы с этим табаком»;
 - ставить оценку по шкале из 5 ступеней и добавлять в избранное (нужен вход);
 - **создавать свои миксы**: они подписаны автором, у автора есть своя страница;
 - входить через Telegram-бота, Google или код на почту;
@@ -97,8 +97,9 @@ src/
     home.js                «/»: приветствие, «Микс дня», табы Миксы/Табаки, кнопки 🔍 и ＋,
                            выезжающий поиск, сортировка, чипсы вкусов/брендов, сетка карточек
     top.js                 «/top»: взвешенный рейтинг (Bayesian, m=5), топ-50
-    detail.js              «/mix?id=», «/tobacco?id=»: hero, автор, состав, описание,
-                           блок оценки, шаринг, удаление своего микса, похожие миксы для табака
+    detail.js              «/mix?id=», «/tobacco?id=»: hero (у табака: «Табак · Бренд · Линейка»), автор,
+                           состав, описание (у миксов и табаков), блок оценки, шаринг,
+                           удаление своего микса, похожие миксы для табака
     favorites.js           «/favorites»
     profile.js             «/profile»: вход (гость) или профиль: статистика, мои миксы, мои оценки, тема, выход
     create.js              «/create»: конструктор микса + шторка выбора табака
@@ -119,8 +120,12 @@ supabase/
   seed/20261106_catalog_expansion.sql     расширение: +8 брендов, 24 линейки, +1089 табаков, +40 миксов
                                           (применён в прод 2026-11-06; идемпотентный).
                                           ⚠️ В папке пользователя и в git этого файла НЕТ: его применила
-                                          другая сессия прямо в базе. Данные в БД есть; файл при
-                                          необходимости восстановить выгрузкой из БД.
+                                          другая сессия прямо в базе. Данные в БД есть; файл передан
+                                          пользователю в чате — положить в репозиторий.
+  seed/20261107_tobacco_descriptions.sql  колонка tobaccos.description + описания у всех табаков,
+                                          tobaccos_api (+description, line_name), DarkSide Sabotage/Shot,
+                                          +84 табака (применён в прод 2026-11-07; идемпотентный).
+                                          ⚠️ Тоже пока только в чате — положить в репозиторий.
 ```
 
 `_old/` — локальный бэкап прежней версии (в `.gitignore`), не используется.
@@ -155,8 +160,8 @@ supabase/
 |---|---|---|
 | `users` | `id uuid PK`, `tg_id bigint unique null`, `name text not null`, `avatar_url`, `auth_id uuid unique → auth.users`, `email`, `provider`, `name_changed`, `created_at`, `last_seen_at` | профиль; RLS вкл., политик нет |
 | `brands` | `id uuid`, `name unique` | RLS + публичный SELECT. 17 брендов: `DarkSide`, `MustHave`, `Black Burn`, `BURN`, `Element`, `Tangiers`, `Fumari`, `Al Fakher`, `Serbetli`, `Adalya`, `Daily Hookah`, `Spectrum`, `Bonche`, `Satyr`, `Chabacco`, `Afzal`, `Nakhla`. Фронт берёт список брендов отсюда (`listBrands`) |
-| `lines` | `id`, `brand_id`, `name`, unique (brand_id,name) | 24 линейки: DarkSide Core/Base/Shake/Xperience, Element Water/Earth/Air, Tangiers Noir, Black Burn HiT, Serbetli Hard Line, Spectrum Classic/Hard Line/Mix/Kitchen, Daily Hookah Formula/Starline, Satyr Aroma/Brilliant/Old School, Chabacco Medium/Emotions/Mix, Nakhla Classic/Mizo. Фронт линейки пока не показывает |
-| `tobaccos` | `id uuid`, `brand_id`, `line_id`, `name`, `taste_tags text[]`, `image_url`, `created_at` | RLS + публичный SELECT. **unique (brand_id, name)**. 1207 позиций. Названия английские, как на банках (у Daily Hookah — русские). У Element один вкус выходит в нескольких линейках, поэтому линейка входит в название: `Raspberry (Water)`, `Raspberry (Earth)` |
+| `lines` | `id`, `brand_id`, `name`, unique (brand_id,name) | 27 линеек: DarkSide Core/Base/Shake/Xperience/Sabotage/Shot, Element Water/Earth/Air, Tangiers Noir, Black Burn HiT, Serbetli Hard Line, Spectrum Classic/Hard Line/Mix/Kitchen, Daily Hookah Formula/Starline, Satyr Aroma/Brilliant/Old School, Chabacco Medium/Emotions/Mix, Nakhla Classic/Mizo. У DarkSide линейка проставлена всем 187 позициям (Core 78, Shot 33, Xperience 30, Sabotage 22, Shake 16, Base 8). Фронт показывает линейку на странице табака (в eyebrow «Табак · Бренд · Линейка»); фильтра по линейкам нет |
+| `tobaccos` | `id uuid`, `brand_id`, `line_id`, `name`, `taste_tags text[]`, `image_url`, `description text`, `created_at` | RLS + публичный SELECT. **unique (brand_id, name)**. 1291 позиция. Названия английские, как на банках (у Daily Hookah и DarkSide Shot — русские). У Element один вкус выходит в нескольких линейках, поэтому линейка входит в название: `Raspberry (Water)`, `Raspberry (Earth)`. `description` заполнен у всех: «Вкус: <ноты>. <характер линейки/бренда>»; у ~204 вкусов с неизвестным составом — «Авторский вкус бренда. …» |
 | `mixes` | `id uuid`, `author_id → users.id`, `title`, `description`, `taste_tags text[]`, `image_url`, `is_published`, `created_at`, `updated_at` | RLS + публичный SELECT; unique (author_id,title) |
 | `mix_ingredients` | `mix_id → mixes`, `tobacco_id → tobaccos null`, `custom_title`, `percent numeric`, `pos int` | PK (mix_id,pos), unique (mix_id,tobacco_id). Без tobacco_id используется custom_title («свой табак») |
 | `mix_ratings` | `mix_id`, `user_id`, `score score_enum`, `updated_at` | PK (mix_id,user_id); RLS, политик нет |
@@ -170,12 +175,14 @@ supabase/
 
 **Вкусовые теги** (`taste_tags` у табаков и миксов, совпадают с `TASTES`): `ананасовый, десертный, кислосладкий,
 кислый, мятный, напиток, пряный, свежий, сладкий, табачный, травяной, тропический, фруктовый, цветочный,
-цитрус, яблочный, ягодный`. Новые табаки размечены по названию и описаниям магазинов (до 3 тегов);
-у ~85 позиций с «говорящими» названиями (Satyr Aroma, Tangiers Kosmik и т. п.) теги пустые.
+цитрус, яблочный, ягодный`. Табаки размечены по названию и описаниям магазинов (до 3 тегов);
+пустые теги остались только у вкусов с неизвестным составом.
 
 ### Представления (читает браузер, `security_invoker = false`, grant anon)
 - `mixes_with_stats`: mixes + `votes, excellent..notgood, avg_score` (из `mix_rating_stats`).
-- `tobaccos_api`: `id, name, cover_url, tags, brand_name, created_at, votes, excellent..notgood, avg_score`.
+- `tobaccos_api`: `id, name, cover_url, tags, brand_name, created_at, votes, excellent..notgood, avg_score, description, line_name`.
+  `description` и `line_name` добавлены 2026-11-07; фронт читает их через `select('*')` и выводит с коммита `0c3ce5d`
+  (нормализация в `api.js`, eyebrow и блок «Описание» в `detail.js`).
 - `mix_ingredients_api`: `mix_id, pos, percent, brand, tobacco, custom_title`.
 - `mix_rating_stats`, `tobacco_rating_stats`, `mixes_api`: служебные и старые.
 
@@ -243,7 +250,7 @@ Redirect URLs: `https://hookahhub.netlify.app/**`, `http://localhost:8888/**`, `
 - **Состояние:** `store.state` и `subscribe(fn)`. Сердечки синхронизируются глобально (`installFavHandler` + `syncFavButtons`).
   Оценки и избранное меняются оптимистично, при ошибке откатываются.
 - **Нормализация** (`api.js`): микс → `{type:'mix', id, name, cover_url, tags, description, votes, avg_score, created_at, author_id, dist}`;
-  табак → `{type:'tobacco', id, name, cover_url, brand_name, tags, votes, avg_score, dist}`;
+  табак → `{type:'tobacco', id, name, cover_url, brand_name, line_name, description, tags, votes, avg_score, dist}`;
   `dist = {5..1: count}`.
 - **Обложки:** если `cover_url`/`image_url` пуст (так у большинства позиций), `cover()` рисует
   градиент с «дымом» и большой первой буквой; цвет зависит от хеша id и названия.
@@ -263,10 +270,11 @@ Redirect URLs: `https://hookahhub.netlify.app/**`, `http://localhost:8888/**`, `
   `draggable=false`, без контекстного меню.
 - **Конструктор микса:** 1–6 строк, проценты кнопками ±5 или вручную, «Поровну», полоска состава,
   до 4 вкусов из `TASTES`. Выбор табака — шторка с поиском по `listAllTobaccos()` или «свой табак» (custom_title).
-  `listAllTobaccos()` грузит все 1207+ табаков **постранично по 1000** и кэширует в модуле;
+  `listAllTobaccos()` грузит все 1291 табак **постранично по 1000** и кэширует в модуле;
   в шторке без запроса показываются первые 80, поиск идёт по всему списку.
 - **Демо-режим:** `npm run dev:demo` или отсутствие `VITE_SUPABASE_*`. Данные из `demo.js`,
   вход мгновенный, своё хранится в `localStorage` (`hh-demo-*`). Сверху показывается баннер.
+  У демо-табаков нет `description` и `line_name`: блок описания и линейка просто не показываются.
 
 ---
 
@@ -333,6 +341,7 @@ npm run build         # dist/ + sw.js
     `[role="gridcell"]`. Большой SQL передавать gzip+base64 и распаковывать `DecompressionStream`, сверяя контрольную сумму.
 - Новые таблицы с данными пользователей: включайте RLS и давайте доступ только через `hh_*` RPC с `hh_uid()`.
 - Новые представления для каталога: `security_invoker = false` + `grant select … to anon, authenticated`.
+  При пересоздании `tobaccos_api` новые колонки добавляйте **в конец** (`create or replace view` не даёт менять порядок).
 
 ---
 
@@ -342,10 +351,9 @@ npm run build         # dist/ + sw.js
   Нужно перевыпустить в Supabase → API Keys и обновить в Netlify и `.env`.
 - Закрыто: старые функции принимали `x-tg-id` (можно было действовать от имени любого пользователя);
   `users`/`sessions` раньше читались anon-ключом. Теперь RLS.
-- **Состояние git и деплоя (2026-11-06):** новая версия запушена коммитом `fc97899`, но его деплой упал
-  на сканере секретов. Исправление (`SECRETS_SCAN_OMIT_KEYS` в `netlify.toml`) и пагинация каталога лежат
-  в рабочей копии пользователя и **ждут коммита и push**. До этого прод работает на старой версии
-  (старый UI и старые функции, включая дыру с `x-tg-id`).
+- **Состояние git и деплоя (2026-11-07):** исправление сканера секретов и пагинация каталога (`cc10365`)
+  и вывод описания/линейки табака (`0c3ce5d`) запушены в `main`; Netlify пересобирает сайт.
+  Статус деплоя после этого пуша стоит проверить в Netlify → Deploys.
 - Микс «Citrus Punch» в базе встречается дважды (дубль был до миграций). Удалять по решению владельца.
 - Есть пользовательский микс с оскорбительным названием (автор с именем «.»). Модерации нет; удалять по решению владельца.
 - Бренд «Everest» запрошен заказчиком, но такой кальянный табак не нашёлся. Ждём уточнения.
@@ -353,10 +361,14 @@ npm run build         # dist/ + sw.js
 - Supabase Free засыпает после 7 дней без запросов.
 - У большинства табаков и миксов нет фото (`image_url` пуст), используются генеративные обложки.
 - Файлы `.idea/*` и `netlify/functions/auth-start.js` в рабочей копии отличаются от git только переводами строк
-  (CRLF/LF); коммитить их не нужно.
+  (CRLF/LF); коммитить их не нужно. **Не используйте `git commit -a`**: он затянет этот шум в коммит.
 - Запись файлов агентом в папку пользователя (`device_commit_files`) может подставить **старую версию**,
   если тот же `stagedPath` уже использовался раньше. Для каждой записи берите **новый промежуточный путь**
   (например, `/mnt/user-data/outputs/<задача>-vN/…`) и **после записи сверяйте md5** с проверенной версией.
+- Из облачной среды агента `git push` невозможен (нет учётных данных GitHub): коммитить можно, пушит пользователь.
+  Полная сборка там тоже не идёт: `node_modules` в папке пользователя собраны под Windows.
+- Массовый сбор данных с htreviews.org (их API `/postData`) запрещён политикой агента — не пытаться;
+  источники для каталога: магазины, обзоры, поиск.
 
 ---
 
@@ -372,6 +384,7 @@ npm run build         # dist/ + sw.js
   `insert … select from (values …)` + `where not exists` по brand + нормализованному имени
   (`regexp_replace(lower(name),'[^a-zа-яё0-9]','','g')`), `on conflict do nothing`, без DELETE/DROP/temp.
   Названия вкусов брать из реальных источников (каталоги магазинов), не выдумывать; бренды писать как в `brands`.
+  Новым табакам сразу заполнять `line_id` и `description` (формат — раздел 5).
   **Файл seed обязательно сохраняйте в репозиторий**, а не только применяйте в базе.
 - **Большие выборки:** всё, что может превысить 1000 строк, грузите постранично (`.range()`).
 - **Проверка UI:** `npx vite build --mode demo && npx vite preview --mode demo` и скриншоты 390×844 и 1440×900.
