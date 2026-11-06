@@ -1,7 +1,12 @@
-import { html, icon, setHTML, cover, fmtScore, votesText, SCORES, toast, shareLink, scoreTone, avatar, sheet } from '../lib/ui.js';
-import { getMix, getTobacco, mixesWithTobacco, getAuthor, deleteMix } from '../lib/api.js';
+import { html, icon, setHTML, cover, fmtScore, votesText, SCORES, toast, shareLink, shareUrl, scoreTone, avatar, sheet } from '../lib/ui.js';
+import { getMix, getTobacco, mixesWithTobacco, getAuthor, deleteMix, attachImage } from '../lib/api.js';
+import { photoField, bindPhoto } from '../lib/photo.js';
+import { openCook } from '../lib/cook.js';
+import { pickMix } from './compare.js';
+import { DEMO } from '../lib/supabase.js';
 import { state, myScore, setRating, subscribe, refreshUser } from '../lib/store.js';
 import { favButton, distribution, card, scoreBadge } from '../components.js';
+import { hasRating, votesLeft, MIN_VOTES } from '../lib/rating.js';
 
 const SEG_COLORS = ['var(--c1)', 'var(--c2)', 'var(--c3)', 'var(--c4)', 'var(--c5)', 'var(--c6)'];
 
@@ -35,6 +40,10 @@ export function DetailPage(el, type, id) {
               <span class="ing__dot" style="background:${SEG_COLORS[i % 6]}"></span>
               <span class="ing__name"><b>${x.tobacco}</b>${x.brand ? html`<small>${x.brand}</small>` : ''}</span>
               <span class="ing__pct">${x.percent}%</span></li>`)}</ul>
+          <div class="mixactions">
+            <button class="btn btn--accent" id="cook">${icon('flame')} Забить</button>
+            <button class="btn btn--ghost" id="compare">Сравнить с другим</button>
+          </div>
           <p class="hint">${icon('flame')} Забейте сами или покажите этот экран кальянщику. После дегустации не забудьте оценить.</p>
         </section>`;
     }
@@ -71,10 +80,10 @@ export function DetailPage(el, type, id) {
 
               <aside class="detail__side" id="rate-anchor">
                 <section class="panel scorebox">
-                  ${x.votes ? html`<div class="scorebox__big score--${scoreTone(x.avg_score)}">
+                  ${hasRating(x) ? html`<div class="scorebox__big score--${scoreTone(x.avg_score)}">
                     ${icon('flame')}<b>${fmtScore(x.avg_score)}</b><small>/ 5</small>
-                  </div>` : html`<div class="scorebox__none">${icon('flame')} Пока без оценок</div>`}
-                  <div class="scorebox__votes">${x.votes ? votesText(x.votes) : 'Попробуйте и станьте первым, кто оценит'}</div>
+                  </div>` : html`<div class="scorebox__none">${icon('flame')} ${x.votes ? 'Мало оценок' : 'Пока без оценок'}</div>`}
+                  <div class="scorebox__votes">${hasRating(x) ? votesText(x.votes) : x.votes ? `${votesText(x.votes)} · для рейтинга нужно ещё ${votesLeft(x)}` : 'Попробуйте и станьте первым, кто оценит'}</div>
                   ${x.votes ? distribution(x.dist, x.votes) : ''}
                 </section>
                 <section class="panel" id="rate">${yourRating()}</section>
@@ -84,13 +93,15 @@ export function DetailPage(el, type, id) {
         </article>`);
 
         el.querySelector('#back').onclick = back;
+        el.querySelector('#cook')?.addEventListener('click', () => openCook(item));
+        el.querySelector('#compare')?.addEventListener('click', () => pickMix((other) => { location.hash = `#/compare?a=${encodeURIComponent(item.id)}&b=${encodeURIComponent(other)}`; }, item.id));
         el.querySelector('#share').onclick = () => {
-            const lines = [`${type === 'mix' ? '🔥' : '💨'} ${type === 'mix' ? 'Микс' : 'Табак'} «${x.name}»${x.votes ? ` — ${fmtScore(x.avg_score)}/5` : ''}`];
+            const lines = [`${type === 'mix' ? '🔥' : '💨'} ${type === 'mix' ? 'Микс' : 'Табак'} «${x.name}»${hasRating(x) ? ` — ${fmtScore(x.avg_score)}/5` : ''}`];
             if (x.brand_name) lines.push(`${x.brand_name}${x.line_name ? ' · ' + x.line_name : ''}`);
             if (x.ingredients?.length) lines.push('', ...x.ingredients.map((i) => `▸ ${i.brand ? i.brand + ' ' : ''}${i.tobacco || i.custom_title} — ${i.percent}%`));
-            if (x.votes) lines.push('', `${votesText(x.votes)} на Hookah Hub`);
+            if (hasRating(x)) lines.push('', `${votesText(x.votes)} на Hookah Hub`);
             lines.push('', 'Забьём? 👇');
-            shareLink({ title: x.name, text: lines.join('\n'), url: location.href, item: x, type });
+            shareLink({ title: x.name, text: lines.join('\n'), url: shareUrl(type, id), item: x, type });
         };
         if (type === 'tobacco') loadRelated();
         if (type === 'mix') loadAuthor();
@@ -104,8 +115,22 @@ export function DetailPage(el, type, id) {
         setHTML(box, html`
           ${a ? html`<a class="author-chip" href="#/author?id=${a.id}">${avatar(a, 'avatar--xs')}<span>Автор: <b>${a.name}</b></span>${icon('chevron')}</a>`
               : html`<span class="author-chip author-chip--static">${avatar({ name: 'Hookah Hub' }, 'avatar--xs')}<span>Автор: <b>Hookah Hub</b></span></span>`}
+          ${mine && !DEMO ? html`<button class="btn btn--sm btn--ghost" id="photoMix">${icon('plus')} Фото</button>` : ''}
           ${mine ? html`<button class="btn btn--sm btn--ghost danger" id="delMix">${icon('trash')} Удалить</button>` : ''}`);
+        box.querySelector('#photoMix')?.addEventListener('click', changePhoto);
         box.querySelector('#delMix')?.addEventListener('click', confirmDelete);
+    }
+
+    function changePhoto() {
+        const s = sheet(html`<div class="tform"><h2 class="h2">Фото микса</h2>${photoField('Выбрать фото')}
+          <button class="btn btn--accent btn--lg" id="savePhoto" disabled>Сохранить</button></div>`);
+        const ph = bindPhoto(s.body), btn = s.body.querySelector('#savePhoto');
+        s.body.addEventListener('change', () => setTimeout(() => { btn.disabled = !ph.get(); }, 400));
+        btn.onclick = async () => {
+            btn.disabled = true; btn.textContent = 'Загружаем…';
+            try { item.cover_url = await attachImage('mix', item.id, ph.get()); s.close(); toast('Фото обновлено'); paint(); }
+            catch (e) { toast(e.message || 'Не удалось', 'err'); btn.disabled = false; btn.textContent = 'Сохранить'; }
+        };
     }
 
     function confirmDelete() {

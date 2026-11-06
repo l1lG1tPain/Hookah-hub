@@ -170,6 +170,9 @@ export async function copyText(text) {
     } catch { return false; }
 }
 
+/** Ссылка для шаринга: /m/<id> или /t/<id> — страница с превью для мессенджеров, затем редирект в приложение */
+export const shareUrl = (type, id) => `${location.origin}/${type === 'mix' ? 'm' : 't'}/${encodeURIComponent(id)}`;
+
 export function shareLink({ title, text, url, item, type }) {
     const full = `${text}\n\n${url}`;
     const enc = encodeURIComponent;
@@ -199,7 +202,7 @@ export function shareLink({ title, text, url, item, type }) {
             const btn = e.target.closest('[data-img]'); btn.disabled = true;
             try {
                 const { makeShareCard } = await import('./sharecard.js');
-                const blob = await makeShareCard(item, type);
+                const blob = await makeShareCard(item, type, url);
                 const file = new File([blob], 'hookah-hub.png', { type: 'image/png' });
                 if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], title, text: full }); }
                 else {

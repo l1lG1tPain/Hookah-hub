@@ -9,6 +9,7 @@ import { updateName } from '../lib/api.js';
 import { rowItem, card } from '../components.js';
 import { getTheme, setTheme } from '../theme.js';
 import { installCard, installMode, bindInstall } from '../lib/pwa.js';
+import { pushMode, pushState, enablePush, disablePush, setPrefs } from '../lib/push.js';
 
 const PROVIDERS = { telegram: 'Telegram', google: 'Google', email: 'почту' };
 const isTouch = matchMedia('(pointer: coarse)').matches;
@@ -178,6 +179,8 @@ function user(el) {
         <div class="rows" id="myRatings">${hadList ? raw(hadList) : html`<div class="row row--skel"><div class="skel"></div></div>`}</div>
       </section>
 
+      <section class="panel settings" id="pushBox" hidden></section>
+
       <section class="panel settings">
         <div class="setting">
           <span>Тема</span>
@@ -199,6 +202,7 @@ function user(el) {
         setTheme(b.dataset.theme);
         $('#theme').querySelectorAll('button').forEach((x) => x.setAttribute('aria-selected', x === b));
     };
+    pushBlock($('#pushBox'));
     loadMyRatings($('#myRatings'));
     loadMyMixes($('#myMixes'), u.id);
 }
@@ -250,4 +254,40 @@ function editName(current) {
         try { await updateName(name); await refreshUser(); s.close(); toast('Имя обновлено'); }
         catch { toast('Не удалось сохранить', 'err'); }
     };
+}
+
+/* ============================== УВЕДОМЛЕНИЯ ============================== */
+const PUSH_OPTS = [['ratings', 'Оценки моих миксов'], ['daily', 'Микс дня (вечером)'], ['news', 'Новое в каталоге (по пятницам)']];
+
+async function pushBlock(box) {
+    const mode = pushMode();
+    if (mode === 'off') return;
+    box.hidden = false;
+    if (mode === 'install') {
+        setHTML(box, html`<div class="setting"><span>${icon('flame')} Уведомления</span></div>
+          <p class="muted small push__note">На iPhone уведомления работают только в установленном приложении: добавьте Hookah Hub на экран «Домой» и откройте его оттуда.</p>`);
+        return;
+    }
+    if (mode === 'denied') {
+        setHTML(box, html`<div class="setting"><span>${icon('flame')} Уведомления</span></div>
+          <p class="muted small push__note">Уведомления заблокированы в настройках браузера для этого сайта. Разрешите их там и обновите страницу.</p>`);
+        return;
+    }
+    const render = async () => {
+        const st = await pushState().catch(() => ({ on: false }));
+        setHTML(box, html`<div class="setting"><span>${icon('flame')} Уведомления</span>
+            <button class="btn btn--sm ${st.on ? 'btn--ghost' : 'btn--accent'}" id="pushToggle">${st.on ? 'Выключить' : 'Включить'}</button></div>
+          ${st.on ? html`<div class="push__opts">${PUSH_OPTS.map(([k, l]) =>
+              html`<label class="push__opt"><input type="checkbox" data-pref="${k}" ${st.prefs[k] ? 'checked' : ''}><span>${l}</span></label>`)}</div>`
+            : html`<p class="muted small push__note">Скажем, когда оценят ваш микс, и пришлём «Микс дня». Без спама.</p>`}`);
+        const btn = box.querySelector('#pushToggle');
+        btn.onclick = async () => {
+            btn.disabled = true;
+            try { if (st.on) await disablePush(); else { await enablePush(); toast('Уведомления включены 🔔'); } }
+            catch (e) { toast(e.message || 'Не удалось включить', 'err'); }
+            render();
+        };
+        box.querySelectorAll('[data-pref]').forEach((c) => { c.onchange = () => setPrefs({ [c.dataset.pref]: c.checked }).catch(() => toast('Не удалось сохранить', 'err')); });
+    };
+    render();
 }

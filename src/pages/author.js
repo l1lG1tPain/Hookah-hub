@@ -20,7 +20,7 @@ export function AuthorPage(el, params) {
             document.title = `${a.name} — Hookah Hub`;
             const since = a.created_at ? new Date(a.created_at).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' }) : '';
             const isMe = state.user?.id === a.id;
-            const rated = mixes.filter((m) => m.votes);
+            const rated = mixes.filter((m) => m.votes >= 3);
             const avg = rated.length ? rated.reduce((s, m) => s + m.avg_score * m.votes, 0) / rated.reduce((s, m) => s + m.votes, 0) : null;
             setHTML(el.querySelector('#head'), html`
               ${avatar(a, 'avatar--xl')}

@@ -3,6 +3,10 @@ import { listMixes, listTobaccos, listBrands } from '../lib/api.js';
 import { state as store, subscribe } from '../lib/store.js';
 import { card, href, favButton } from '../components.js';
 import { TASTES } from '../lib/tastes.js';
+import { hasRating } from '../lib/rating.js';
+import { openTobaccoSheet } from '../lib/tobaccoForm.js';
+import { DEMO } from '../lib/supabase.js';
+import { toast } from '../lib/ui.js';
 import { makeGreeting } from '../lib/phrases.js';
 import { installCard, installMode, dismissed, bindInstall } from '../lib/pwa.js';
 
@@ -28,6 +32,8 @@ export function HomePage(el) {
         <div class="hero__pick" id="pick"></div>
       </section>
 
+      <section class="cols" id="cols" hidden></section>
+
       <section class="catalog">
         <div class="toolbar">
           <div class="seg" role="tablist">
@@ -36,7 +42,7 @@ export function HomePage(el) {
           </div>
           <div class="toolbar__actions">
             <button class="tool-btn ${f.q ? 'on' : ''}" id="searchBtn" aria-label="Поиск" aria-expanded="${!!f.q}">${icon('search')}</button>
-            <a class="tool-btn tool-btn--accent" href="#/create" aria-label="Создать микс" title="Создать свой микс">${icon('plus')}</a>
+            <a class="tool-btn tool-btn--accent" id="plusBtn" href="#/create" aria-label="Создать микс" title="Создать свой микс">${icon('plus')}</a>
           </div>
         </div>
         <div class="searchbar ${f.q ? 'open' : ''}" id="searchBar">
@@ -58,6 +64,9 @@ export function HomePage(el) {
 
     function paintControls() {
         el.querySelectorAll('[data-tab]').forEach((b) => b.setAttribute('aria-selected', b.dataset.tab === f.tab));
+        const plus = $('#plusBtn'), tob = f.tab === 'tobaccos' && !DEMO;
+        plus.title = plus.ariaLabel = tob ? 'Добавить табак или бренд' : 'Создать свой микс';
+        plus.setAttribute('href', tob ? '#/' : '#/create');
         el.querySelectorAll('[data-sort]').forEach((b) => b.classList.toggle('on', b.dataset.sort === f.sort));
         setHTML($('#chips'), TASTES.map((t) => html`<button class="chip ${f.tags.has(t) ? 'on' : ''}" data-tag="${t}">${t}</button>`));
         const br = $('#brands');
@@ -65,8 +74,28 @@ export function HomePage(el) {
         if (!br.hidden) setHTML(br, brandsCache.map((b) => html`<button class="chip chip--brand ${f.brands.has(b) ? 'on' : ''}" data-brand="${b}">${b}</button>`));
     }
 
+    /* Подборки: показываем, пока нет фильтров и поиска */
+    const COLS = [
+        ['🏆 Лучшие по версии сообщества', { sort: 'top', limit: 10 }],
+        ['🆕 Новые миксы', { sort: 'new', limit: 10 }],
+        ['🍬 Для новичков: сладкие', { sort: 'top', tags: ['сладкий'], limit: 10 }],
+        ['🍋 Любителям кислинки', { sort: 'top', tags: ['кислый'], limit: 10 }],
+    ];
+    let colsData = null;
+    async function paintCols() {
+        const box = $('#cols');
+        const show = f.tab === 'mixes' && !f.q.trim() && !f.tags.size;
+        box.hidden = !show;
+        if (!show) return;
+        colsData ??= await Promise.all(COLS.map(async ([t, o]) => [t, await listMixes(o).catch(() => [])]));
+        if (box.hidden) return;
+        setHTML(box, colsData.filter(([, items]) => items.length >= 3).map(([t, items]) => html`<div>
+            <div class="cols__head"><h2>${t}</h2></div><div class="hscroll">${items.map(card)}</div></div>`));
+    }
+
     let seq = 0;
     async function load() {
+        paintCols();
         const my = ++seq;
         list.classList.add('loading');
         if (!list.children.length) setHTML(list, skeletonCards(6));
@@ -88,7 +117,7 @@ export function HomePage(el) {
 
     async function loadPick() {
         try {
-            pickCache ??= (await listMixes({ sort: 'top', limit: 10 })).filter((m) => m.votes);
+            pickCache ??= (await listMixes({ sort: 'top', limit: 10 })).filter(hasRating);
             if (!pickCache.length) return;
             const day = Math.floor(Date.now() / 864e5);
             const m = pickCache[day % pickCache.length];
@@ -121,6 +150,12 @@ export function HomePage(el) {
         load();
     });
 
+    $('#plusBtn').addEventListener('click', (e) => {
+        if (f.tab !== 'tobaccos' || DEMO) return;
+        e.preventDefault();
+        if (!store.user) { toast('Войдите, чтобы добавлять табаки'); location.hash = '#/profile'; return; }
+        openTobaccoSheet({ onCreated: (t) => { location.hash = `#/tobacco?id=${encodeURIComponent(t.id)}`; } });
+    });
     $('#q').addEventListener('input', debounce((e) => { f.q = e.target.value; $('#searchBtn').classList.toggle('on', !!f.q); load(); }, 280));
     $('#searchBtn').addEventListener('click', () => {
         const bar = $('#searchBar');

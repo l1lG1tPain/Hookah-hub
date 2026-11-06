@@ -680,3 +680,81 @@ body:has(.sheet.open) .toasts { top: calc(16px + env(safe-area-inset-top)); bott
 .install--compact .install__text span { display: none; }
 .install--compact .install__text b { font-size: 14px; }
 .share__cover .cover__letter { font-size: 26px; }
+
+/* ===== Фото, форма табака ===== */
+.photo { position: relative; }
+.photo__pick { display: block; border: 1.5px dashed var(--line-2); border-radius: var(--r-lg); overflow: hidden; cursor: pointer; background: var(--surface); min-height: 120px; }
+.photo__pick:hover { border-color: var(--accent); }
+.photo__ph { min-height: 120px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: var(--text-2); }
+.photo__ph .ic { width: 26px; height: 26px; color: var(--accent); }
+.photo__ph small { color: var(--muted); font-size: 12px; }
+.photo__img { display: block; width: 100%; max-height: 260px; object-fit: cover; }
+.photo__x { position: absolute; top: 8px; right: 8px; width: 34px; height: 34px; border-radius: 50%; border: 0; background: rgba(15, 10, 7, .7); color: #fff; display: grid; place-items: center; }
+.tform { display: flex; flex-direction: column; gap: 14px; }
+.tform .h2 { margin-bottom: 0; }
+.tform__sug { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.tform__sug:empty { display: none; }
+.tform__hint { color: var(--muted); font-size: 12.5px; margin-top: 6px; display: block; }
+.picker__custom--new { border-style: dashed; margin-top: 10px; }
+
+/* ===== Сердечко: всплеск ===== */
+.fav { position: relative; }
+.fav.pop { animation: pop .45s var(--ease); }
+.fav.pop::after { content: ''; position: absolute; inset: -6px; border-radius: 50%; border: 2px solid #ff5c7a; opacity: 0; animation: ring .5s ease-out; pointer-events: none; }
+@keyframes pop { 30% { transform: scale(.82); } 60% { transform: scale(1.3); } 100% { transform: scale(1); } }
+@keyframes ring { 0% { transform: scale(.5); opacity: .9; } 100% { transform: scale(1.5); opacity: 0; } }
+.heartfly { position: fixed; z-index: 300; pointer-events: none; font-size: 16px; animation: fly .8s ease-out forwards; }
+@keyframes fly { 0% { transform: translate(0, 0) scale(.6); opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)) scale(1.1); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .fav.pop, .fav.pop::after, .heartfly { animation: none; } }
+
+/* ===== Уведомления в профиле ===== */
+.push__note { padding: 0 4px 6px; margin: 0; }
+.push__opts { display: flex; flex-direction: column; gap: 2px; padding: 4px 0 6px; }
+.push__opt { display: flex; align-items: center; gap: 12px; padding: 10px 4px; cursor: pointer; }
+.push__opt input { width: 20px; height: 20px; accent-color: var(--accent); }
+
+/* ===== Забить ===== */
+.cook { display: flex; flex-direction: column; gap: 14px; }
+.cook .h2 { margin-bottom: 0; }
+.cook__bowl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cook__ing { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cook__ing li { display: flex; justify-content: space-between; gap: 12px; padding: 10px 14px; border-radius: var(--r); background: var(--surface-2); }
+.cook__ing small { color: var(--muted); }
+.cook__ing b { font-family: var(--font-display); font-weight: 600; }
+.cook__timer { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-radius: var(--r); background: var(--accent-soft); border: 1px solid var(--accent); }
+.cook__timer b { font-family: var(--font-display); font-size: 28px; margin-left: auto; letter-spacing: -.03em; }
+.cook__steps { list-style: none; counter-reset: s; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.cook__steps li { counter-increment: s; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; border-radius: var(--r); background: var(--surface-2); }
+.cook__steps li b::before { content: counter(s) '. '; color: var(--accent); }
+.cook__steps p { margin: 4px 0 0; }
+.mixactions { display: flex; gap: 10px; flex-wrap: wrap; margin: 16px 0 4px; }
+
+/* ===== Сравнение ===== */
+.cmp { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.cmp__col { padding: 14px; border-radius: var(--r-lg); background: var(--surface); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.cmp__col--empty { align-items: center; justify-content: center; border-style: dashed; min-height: 160px; }
+.cmp__title { font-family: var(--font-display); font-weight: 600; font-size: 16px; letter-spacing: -.02em; overflow-wrap: anywhere; }
+.cmp__score { display: flex; align-items: baseline; gap: 6px; }
+.cmp__score .ic { width: 20px; height: 20px; color: var(--accent); align-self: center; }
+.cmp__score b { font-family: var(--font-display); font-size: 28px; }
+.cmp__score small { color: var(--muted); }
+.tag--common { background: var(--accent-soft); color: var(--accent); }
+.ing--sm { font-size: 13px; }
+.ing--shared { background: var(--accent-soft); border-radius: 10px; }
+
+/* ===== Подборки на главной ===== */
+.cols { display: flex; flex-direction: column; gap: 22px; margin: 6px 0 26px; }
+.cols__head { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+.cols__head h2 { font-family: var(--font-display); font-weight: 600; font-size: 17px; letter-spacing: -.02em; margin: 0; }
+.hscroll { display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x proximity; padding: 2px 2px 8px; margin: 0 -16px; padding-inline: 16px; scrollbar-width: none; }
+.hscroll::-webkit-scrollbar { display: none; }
+.hscroll > .card { flex: 0 0 168px; scroll-snap-align: start; }
+@media (min-width: 860px) { .hscroll { margin: 0; padding-inline: 2px; } .hscroll > .card { flex-basis: 200px; } }
+.hscroll { scroll-padding-inline: 16px; }
+.ing--sm li { display: flex; align-items: center; gap: 8px; padding: 8px 10px; }
+.ing--sm .ing__name { flex: 1; min-width: 0; }
+.ing--sm .ing__pct { margin-left: auto; font-size: 14px; flex: none; }
+.cmp + .hint { margin-top: 14px; }
+.ing--sm li { gap: 6px; padding: 8px; }
+.ing--sm .ing__name b { font-size: 13.5px; }
+.ing--sm .ing__pct { font-size: 13px; }

@@ -6,7 +6,7 @@
 > и синхронизируйте его копию в claude.ai Project «Hookah hub» (doc `claude/ARCHITECTURE.md`).
 > Порядок обновления — в разделе [«Как поддерживать этот файл»](#как-поддерживать-этот-файл).
 
-_Последнее обновление: 2026-11-07 (PWA-установка, лоадер с акулой, живые приветствия, новый шаринг с картинкой; ранее: описания и линейки табаков, починка деплоя на Netlify)._
+_Последнее обновление: 2026-11-08 (пуши, загрузка фото, свои табаки и бренды, новый подсчёт оценок, ссылки /m/ и /t/ с превью, «Забить», сравнение, подборки; ранее: Google-вход, PWA-установка, лоадер)._
 
 ---
 
@@ -24,7 +24,11 @@ _Последнее обновление: 2026-11-07 (PWA-установка, л
 - входить через Telegram-бота, Google или код на почту;
 - менять имя и тему (тёмная, светлая, авто);
 - **установить приложение**: на Android/desktop кнопка «Установить» (нативный диалог), на iOS подсказка «Поделиться → На экран Домой»; карточка видна в профиле и (с крестиком на 7 дней) на главной, пока приложение не установлено;
-- делиться миксом/табаком: Telegram, WhatsApp, ссылка, текст, **картинка-карточка** (canvas).
+- делиться миксом/табаком: Telegram, WhatsApp, ссылка, текст, **картинка-карточка** (canvas, с QR);
+- **добавлять свои табаки и бренды** (шторка «Добавить табак»: бренд из списка или новый) и **загружать фото** к своим миксам и табакам (сжатие на устройстве до ≤200 КБ);
+- включать **пуш-уведомления** (оценки моих миксов, «Микс дня», новинки каталога);
+- нажать **«Забить»** на миксе: граммовка по размеру чаши и таймеры (угли, прогрев, сессия);
+- **сравнить два микса** (`#/compare`); на главной горизонтальные **подборки**.
 
 Продакшн: `https://hookahhub.netlify.app`. Репозиторий: `github.com/l1lG1tPain/Hookah-hub` (публичный).
 Язык интерфейса: русский. Основная аудитория: мобильные пользователи; приложение ставится как PWA.
@@ -75,6 +79,9 @@ ARCHITECTURE.md            этот файл (для агентов и люде�
 CLAUDE.md                  короткая инструкция агентам: читать/обновлять ARCHITECTURE.md
 
 public/
+  push-sw.js               обработчик push/notificationclick; подключён в sw.js через importScripts
+  og.png                   1200×630, превью сайта для мессенджеров
+  privacy.html, terms.html страницы для Google OAuth (Branding)
   icons/192.png, 512.png   логотип: акула с кальяном (используется и как аватар «Hookah Hub»)
   icons/shark.webp         акула в худи (прозрачный фон): лоадер, карточка установки, картинка шаринга
   manifest.webmanifest
@@ -99,6 +106,11 @@ src/
                            dismiss в localStorage 'hh-pwa-dismiss' (7 дней)
     phrases.js             LOADING (15 фраз лоадера) и makeGreeting() — приветствия по времени суток, {n} = имя
     sharecard.js           makeShareCard(): PNG 1080×1350 через canvas (подгружается лениво)
+    rating.js              MIN_VOTES=3, hasRating, rankItems/sortTop: взвешенный рейтинг (см. «Оценки»)
+    photo.js               compressImage (canvas → WebP/JPEG ≤1024px, ≤200 КБ), photoField/bindPhoto
+    tobaccoForm.js         openTobaccoSheet(): бренд + табак + фото; createBrand → createTobacco → attachImage
+    push.js                Web Push на клиенте: pushMode/pushState/enablePush/disablePush/setPrefs
+    cook.js                openCook(mix): граммовка и таймеры «Забить» (Wake Lock)
     tastes.js              TASTES — единый список вкусовых тегов (фильтры и конструктор)
     demo.js                встроенные демо-данные
   pages/
@@ -111,10 +123,17 @@ src/
     favorites.js           «/favorites»
     profile.js             «/profile»: вход (гость) или профиль: статистика, мои миксы, мои оценки, тема, выход
     create.js              «/create»: конструктор микса + шторка выбора табака
+    compare.js             «/compare?a=&b=»: два микса рядом; pickMix() — шторка выбора
     author.js              «/author?id=»: публичная страница автора и его миксы
   styles/app.css           ВСЯ стилизация (дизайн-токены, компоненты, адаптив)
 
 netlify/functions/
+  share.js                 /m/<id>, /t/<id> (редиректы в netlify.toml): HTML с Open Graph для превью в мессенджерах
+                           + мгновенный переход на `/#/mix?id=…` / `/#/tobacco?id=…`; данные берёт REST-запросом с anon-ключом
+  push-ratings.js          расписание */15 мин: авторам «ваш микс оценили»
+  push-daily.js            расписание 0 14 * * * (19:00 Ташкент): «Микс дня»
+  push-news.js             расписание 0 15 * * 5: «Новое в каталоге», если за неделю добавились табаки
+  _lib/push.js             init() (VAPID + service role), send() (удаляет подписки с 404/410)
   auth-start.js            POST: создаёт login_states(state), возвращает deep-link на бота
   auth-wait.js             GET ?state=: при status='ok' создаёт/находит auth-пользователя,
                            возвращает одноразовый token_hash (magiclink) → фронт делает verifyOtp
@@ -124,6 +143,10 @@ netlify/functions/
 supabase/
   migrations/20261106_supabase_auth.sql   Supabase Auth, RPC hh_*, RLS, админ-схема hh_admin
   migrations/20261106_user_mixes.sql      свои миксы, автор, hh_create_mix/hh_delete_mix
+  migrations/20261108_push_uploads_tobaccos.sql  push_subscriptions + hh_push_*, корзина Storage `user-images`
+                                          (300 КБ, webp/jpeg/png, ≤40 файлов на пользователя), hh_set_image,
+                                          hh_create_brand, hh_create_tobacco, hh_delete_tobacco, brands/tobaccos.created_by.
+                                          Применить в SQL Editor (потребует подтвердить окно из-за DELETE внутри функции)
   seed/20261106_catalog.sql               каталог: Darkside 35, Black Burn 33, MustHave 38 + 26 миксов
   seed/20261106_catalog_expansion.sql     расширение: +8 брендов, 24 линейки, +1089 табаков, +40 миксов
                                           (применён в прод 2026-11-06; идемпотентный).
@@ -176,6 +199,7 @@ supabase/
 | `tobacco_ratings` | `tobacco_id`, `user_id`, `score score_enum`, `updated_at` | unique (tobacco_id,user_id); RLS |
 | `favorites` | `user_id`, `item_type text ('mix'/'tobacco')`, `item_id uuid`, `created_at` | RLS |
 | `login_states` | `state text PK`, `status ('new','ok','consumed','expired')`, `user_id`, `tg_id`, `created_at` | вход через Telegram; TTL 10 мин |
+| `push_subscriptions` | `user_id`, `endpoint` unique, `p256dh`, `auth`, `notify_ratings/daily/news`, `last_rating_check`, `user_agent` | RLS без политик; доступ через `hh_push_*` и service role в функциях |
 | `sessions` | устаревшая (старые токены x-session) | не используется, закрыта RLS |
 
 `score_enum` = `excellent | good | ok | bad | notgood` ↔ на фронте **5..1**
@@ -214,6 +238,11 @@ supabase/
 | `hh_authors(uuid[])` | anon | имена и аватары пачкой |
 | `hh_create_mix(title, description, tags[], ingredients jsonb)` | authenticated | проверки: название 2–60, 1–6 строк, сумма = 100, % > 0, табак существует, до 10 миксов в сутки. `ingredients: [{tobacco_id, percent} \| {custom_title, percent}]`. Публикует сразу |
 | `hh_delete_mix(id)` | authenticated | только свой микс; удаляет состав, оценки и избранное |
+| `hh_create_brand(name)` | authenticated | 2–40 символов; дубль (без регистра/знаков) возвращает существующий; до 5 новых в сутки |
+| `hh_create_tobacco(brand_id, name, line, tags[], description)` | authenticated | 2–60 символов; дубль в бренде возвращает существующий; линейка создаётся при необходимости; до 20 в сутки; `created_by` = автор |
+| `hh_delete_tobacco(id)` | authenticated | только свой и пока нет ингредиентов/оценок |
+| `hh_set_image(type, id, url)` | authenticated | `url` обязан быть из `user-images/<auth.uid()>/…`; микс — автор, табак — `created_by` |
+| `hh_push_subscribe/status/prefs/unsubscribe` | authenticated | подписки Web Push текущего устройства и их настройки |
 | `mix_rating_aggregate(uuid)` | старая | не используется фронтом |
 
 Триггер `hh_on_auth_user_created` на `auth.users` при регистрации вызывает `hh_link_profile`.
@@ -266,14 +295,23 @@ Redirect URLs: `https://hookahhub.netlify.app/**`, `http://localhost:8888/**`, `
   по хешу **имени** и инициалы (до 2 букв). Цвет меняется вместе с именем. У `Hookah Hub` — логотип.
 - **Оценка:** кнопки идут **слева направо от худшей к лучшей** (😐 → 💯).
   Распределение оценок выводится сверху вниз от лучшей к худшей.
-- **Топ:** `WR = v/(v+m)·R + m/(v+m)·C`, `m = 5`, C — средняя по каталогу; берутся 100 позиций по числу голосов.
+- **Оценки (`lib/rating.js`, как у IMDb):** средняя показывается только при `votes ≥ 3` (`MIN_VOTES`), иначе бейдж «new» и подсказка «нужно ещё N». Топ и сортировка «Лучшие» используют `WR = v/(v+m)·R + m/(v+m)·C`, `m = 5`, C — средняя по загруженной выборке; для «Лучших» берётся 300 строк по сырой средней и переупорядочивается на клиенте. Позиции с <3 голосами в Топ не попадают.
 - **«Микс дня»:** детерминированно по номеру дня из топ-10 миксов с голосами.
 - **Поиск на главной:** кнопка 🔍 справа от табов раскрывает панель `.searchbar.open`
   (в закрытом виде `max-height:0; visibility:hidden`). Повторное нажатие закрывает панель и сбрасывает запрос.
   Фильтры главной хранятся в памяти модуля и переживают переходы между страницами.
   Списки на главной ограничены 60 карточками на запрос (сортировка и фильтры работают на сервере).
-- **Поделиться:** своё окно `shareLink()`: Telegram (`t.me/share/url`), WhatsApp (`wa.me`),
-  «Ссылка», «Текст и ссылка», при наличии ещё системное меню. Копирование через `copyText` с фоллбеком на `execCommand`.
+- **Поделиться:** `shareLink()`: превью, Telegram, WhatsApp, «Картинкой», ссылка, текст, системное меню. Ссылки делятся
+  как `shareUrl(type,id)` = `/m/<id>` или `/t/<id>` (функция `share.js` отдаёт OG-превью и редиректит в хэш-маршрут): так превью
+  работает в мессенджерах, а ссылка не зависит от `#`. Картинка (`sharecard.js`) содержит QR на эту же ссылку: в самой картинке ссылки
+  кликабельными быть не могут, поэтому к ней же передаётся текст со ссылкой. Копирование через `copyText` с фоллбеком на `execCommand`.
+- **Ссылки в PWA:** в манифесте `handle_links: preferred` и `launch_handler: navigate-existing`; на Android установленный PWA
+  перехватывает ссылки своего домена, на iOS Apple этого не позволяет (ссылки открываются в Safari).
+- **Фото:** `compressImage` ужимает на устройстве (макс. сторона 1024 px, ≤200 КБ, WebP, на Safari без WebP — JPEG), грузит в
+  `user-images/<auth.uid()>/<uuid>.webp`, затем `hh_set_image`. Лимиты дублируются на уровне корзины (300 КБ, mime) и политик.
+- **Пуши:** `push.js` подписывает по нажатию кнопки в профиле (на iOS только из установленного PWA). Рассылают три расписанные
+  Netlify-функции; нужны env `VITE_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`.
+- **Подборки на главной:** 4 горизонтальные ленты (лучшие, новые, сладкие для новичков, кислые), скрыты при поиске/фильтрах/вкладке «Табаки».
 - **Защита контента:** `user-select: none` на body (кроме input/textarea), картинки с `pointer-events:none`,
   `draggable=false`, без контекстного меню.
 - **Конструктор микса:** 1–6 строк, проценты кнопками ±5 или вручную, «Поровну», полоска состава,
@@ -316,6 +354,9 @@ Redirect URLs: `https://hookahhub.netlify.app/**`, `http://localhost:8888/**`, `
 | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | фронт (бандл) | клиент Supabase |
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE` | Netlify Functions | admin-доступ (вход через Telegram). **Секрет** |
 | `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME` (`hookah_akulka_bot`) | Netlify Functions | бот |
+| `VITE_VAPID_PUBLIC_KEY` | фронт + функции | публичный ключ Web Push (`npx web-push generate-vapid-keys`) |
+| `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Netlify Functions | приватный ключ (**секрет**) и `mailto:` для VAPID |
+| `SITE_URL` | Netlify Functions | необязательно; по умолчанию `https://hookahhub.netlify.app` |
 | `TG_WEBHOOK_SECRET` | Netlify Functions | необязательно; проверка `x-telegram-bot-api-secret-token` |
 
 ```bash
@@ -374,8 +415,9 @@ npm run build         # dist/ + sw.js
 - Микс «Citrus Punch» в базе встречается дважды (дубль был до миграций). Удалять по решению владельца.
 - Есть пользовательский микс с оскорбительным названием (автор с именем «.»). Модерации нет; удалять по решению владельца.
 - Бренд «Everest» запрошен заказчиком, но такой кальянный табак не нашёлся. Ждём уточнения.
-- Google-вход: в Supabase провайдер ещё **не включён** (нет Client ID/Secret). Пошаговая настройка Google Cloud — в чате 2026-11-07; нужны: OAuth consent screen, Web-клиент, redirect `https://oounhljncukihkoseufq.supabase.co/auth/v1/callback`.
-- Пуш-уведомления не реализованы. План: Web Push (VAPID), таблица `push_subscriptions`, обработчик `push` в SW, функция отправки; на iOS работает только в установленном PWA (16.4+).
+- Google-вход **работает** (включён 2026-11-07). Google Cloud: проект «Hookah Hub», приложение In production, Web-клиент с origin `https://hookahhub.netlify.app` и redirect `https://oounhljncukihkoseufq.supabase.co/auth/v1/callback`; Client ID/Secret вставлены в Supabase → Authentication → Sign In / Providers → Google. Страницы `/privacy.html` и `/terms.html` указаны в Branding. Логотип в Branding не загружать: он запускает проверку бренда, которая требует подтверждения сайта в Search Console (netlify.app-поддомен без своего домена это усложняет).
+- Пуши реализованы в коде (2026-11-08); для работы нужны миграция `20261108_…`, VAPID-ключи в env и деплой. На iOS работают только в установленном PWA (16.4+). Расписание Netlify-функций включается после деплоя.
+- Свои табаки/бренды публикуются сразу, без модерации (лимиты: 5 брендов и 20 табаков в сутки на человека). Удалять спам — SQL в Supabase.
 - Supabase Free засыпает после 7 дней без запросов.
 - У большинства табаков и миксов нет фото (`image_url` пуст), используются генеративные обложки.
 - Файлы `.idea/*` и `netlify/functions/auth-start.js` в рабочей копии отличаются от git только переводами строк

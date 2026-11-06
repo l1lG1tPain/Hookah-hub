@@ -1,11 +1,12 @@
 // Общие компоненты: карточки, бейдж рейтинга, сердечко, распределение оценок
 import { html, icon, cover, fmtScore, scoreTone, SCORES, votesText, toast } from './lib/ui.js';
 import { state, isFav, toggleFav } from './lib/store.js';
+import { hasRating, votesLeft } from './lib/rating.js';
 
 export const href = (item) => `#/${item.type}?id=${encodeURIComponent(item.id)}`;
 
 export function scoreBadge(item, cls = '') {
-    if (!item.votes) return html`<span class="score score--new ${cls}">new</span>`;
+    if (!hasRating(item)) return html`<span class="score score--new ${cls}" title="${item.votes ? `Нужно ещё ${votesLeft(item)} оц. для рейтинга` : 'Ещё не оценивали'}">new</span>`;
     return html`<span class="score score--${scoreTone(item.avg_score)} ${cls}" title="${votesText(item.votes)}">${icon('flame')}<b>${fmtScore(item.avg_score)}</b></span>`;
 }
 
@@ -51,6 +52,21 @@ export function distribution(dist, votes) {
     })}</div>`;
 }
 
+/* Всплеск сердечек + лёгкая вибрация */
+function burst(btn) {
+    try { navigator.vibrate?.(12); } catch {}
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const r = btn.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+    for (let i = 0; i < 7; i++) {
+        const h = document.createElement('span');
+        const a = (Math.PI * 2 * i) / 7 + Math.random() * 0.6, d = 28 + Math.random() * 26;
+        h.className = 'heartfly'; h.textContent = ['❤️', '🔥', '💖'][i % 3];
+        h.style.cssText = `left:${cx - 8}px;top:${cy - 8}px;--dx:${Math.cos(a) * d}px;--dy:${Math.sin(a) * d - 18}px`;
+        document.body.appendChild(h);
+        setTimeout(() => h.remove(), 850);
+    }
+}
+
 /* Глобально: клики по сердечкам и синхронизация их состояния */
 export function installFavHandler() {
     document.addEventListener('click', async (e) => {
@@ -64,9 +80,10 @@ export function installFavHandler() {
         }
         const [type, id] = btn.dataset.fav.split(':');
         btn.classList.add('pop');
-        setTimeout(() => btn.classList.remove('pop'), 350);
+        setTimeout(() => btn.classList.remove('pop'), 500);
         try {
             const on = await toggleFav(type, id);
+            if (on) burst(btn);
             toast(on ? 'Добавлено в избранное' : 'Убрано из избранного');
         } catch {
             toast('Не удалось обновить избранное', 'err');

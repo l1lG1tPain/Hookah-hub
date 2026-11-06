@@ -2,6 +2,7 @@
 // личные действия — через RPC с проверкой auth.uid() в базе.
 import { supabase, DEMO } from './supabase.js';
 import { demoMixes, demoTobaccos } from './demo.js';
+import { sortTop } from './rating.js';
 
 /* ---------------- нормализация ---------------- */
 const SCORE_KEYS = { 5: 'excellent', 4: 'good', 3: 'ok', 2: 'bad', 1: 'notgood' };
@@ -74,9 +75,10 @@ export async function listMixes({ q = '', tags = [], sort = 'new', limit = 60, a
         : sort === 'popular'
             ? r.order('votes', { ascending: false }).order('avg_score', { ascending: false, nullsFirst: false })
             : r.order('created_at', { ascending: false });
-    const { data, error } = await r.limit(limit);
+    const { data, error } = await r.limit(sort === 'top' ? Math.max(limit, 300) : limit);
     if (error) throw error;
-    return data.map(normMix);
+    const out = data.map(normMix);
+    return sort === 'top' ? sortTop(out).slice(0, limit) : out;
 }
 
 export async function listTobaccos({ q = '', tags = [], brands = [], sort = 'new', limit = 60 } = {}) {
@@ -94,9 +96,10 @@ export async function listTobaccos({ q = '', tags = [], brands = [], sort = 'new
         : sort === 'popular'
             ? r.order('votes', { ascending: false })
             : r.order('created_at', { ascending: false });
-    const { data, error } = await r.limit(limit);
+    const { data, error } = await r.limit(sort === 'top' ? Math.max(limit, 300) : limit);
     if (error) throw error;
-    return data.map(normTobacco);
+    const out = data.map(normTobacco);
+    return sort === 'top' ? sortTop(out).slice(0, limit) : out;
 }
 
 export async function listBrands() {
@@ -158,7 +161,7 @@ function demoFilter(items, { q, tags, sort }) {
     let r = items.filter((x) =>
         (!ql || x.name.toLowerCase().includes(ql) || (x.brand_name || '').toLowerCase().includes(ql)) &&
         tags.every((t) => x.tags.includes(t)));
-    if (sort === 'top') r.sort((a, b) => (b.avg_score ?? 0) - (a.avg_score ?? 0) || b.votes - a.votes);
+    if (sort === 'top') r = sortTop(r);
     else if (sort === 'popular') r.sort((a, b) => b.votes - a.votes);
     else r.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
     return r;
@@ -307,3 +310,36 @@ export async function deleteMix(id) {
     if (DEMO) { localStorage.setItem('hh-demo-mymixes', JSON.stringify(demoUserMixes().filter((m) => m.id !== id))); return; }
     return rpc('hh_delete_mix', { p_id: id });
 }
+
+/* ---------------- свои бренды и табаки, картинки ---------------- */
+const demoOff = () => { throw new Error('В демо-режиме недоступно'); };
+
+export async function listBrandsFull() {
+    if (DEMO) return [...new Set(demoTobaccos.map((t) => t.brand_name))].sort().map((n) => ({ id: n, name: n }));
+    const { data, error } = await supabase.from('brands').select('id,name').order('name');
+    if (error) throw error;
+    return data;
+}
+export const createBrand = (name) => (DEMO ? demoOff() : rpc('hh_create_brand', { p_name: name }));
+export const createTobacco = ({ brandId, name, line, tags, description }) => (DEMO ? demoOff()
+    : rpc('hh_create_tobacco', { p_brand_id: brandId, p_name: name, p_line: line || null, p_tags: tags || [], p_description: description || null }));
+export const deleteTobacco = (id) => (DEMO ? demoOff() : rpc('hh_delete_tobacco', { p_id: id }));
+
+/** Загружает уже сжатый файл в корзину user-images/<auth uid>/… и привязывает к миксу/табаку */
+export async function attachImage(type, id, { blob, type: mime, ext }) {
+    if (DEMO) demoOff();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error('Войдите, чтобы загружать фото');
+    const path = `${session.user.id}/${crypto.randomUUID()}.${ext}`;
+    const { error } = await supabase.storage.from('user-images').upload(path, blob, { contentType: mime, cacheControl: '31536000', upsert: false });
+    if (error) throw new Error(/exceed|size|large/i.test(error.message) ? 'Фото слишком большое' : 'Не удалось загрузить фото');
+    const { data } = supabase.storage.from('user-images').getPublicUrl(path);
+    await rpc('hh_set_image', { p_type: type, p_id: id, p_url: data.publicUrl });
+    return data.publicUrl;
+}
+
+/* ---------------- пуш-подписки ---------------- */
+export const pushSubscribe = (sub) => rpc('hh_push_subscribe', { p_endpoint: sub.endpoint, p_p256dh: sub.keys.p256dh, p_auth: sub.keys.auth, p_ua: navigator.userAgent });
+export const pushStatus = (endpoint) => rpc('hh_push_status', { p_endpoint: endpoint });
+export const pushPrefs = (endpoint, { ratings = null, daily = null, news = null }) => rpc('hh_push_prefs', { p_endpoint: endpoint, p_ratings: ratings, p_daily: daily, p_news: news });
+export const pushUnsubscribe = (endpoint) => rpc('hh_push_unsubscribe', { p_endpoint: endpoint });

@@ -17,6 +17,7 @@ import { ProfilePage } from './pages/profile.js';
 import { DetailPage } from './pages/detail.js';
 import { CreatePage } from './pages/create.js';
 import { AuthorPage } from './pages/author.js';
+import { ComparePage } from './pages/compare.js';
 
 const routes = {
     '/': HomePage,
@@ -25,6 +26,7 @@ const routes = {
     '/profile': ProfilePage,
     '/create': CreatePage,
     '/author': AuthorPage,
+    '/compare': ComparePage,
     '/mix': (el, p) => DetailPage(el, 'mix', p.get('id')),
     '/tobacco': (el, p) => DetailPage(el, 'tobacco', p.get('id')),
 };
@@ -104,9 +106,13 @@ async function boot() {
     shell();
     installFavHandler();
     subscribe(paintUser);
+    if (!location.hash) history.replaceState(null, '', location.pathname + location.search + '#/');
     window.addEventListener('hashchange', route);
+    window.addEventListener('pageshow', () => { if (!document.getElementById('view')?.children.length) { current = null; route(); } });
     route();
     await initAuth().catch(() => {});
+    // страховка: если к этому моменту страница осталась пустой (первый заход без аккаунта) — рисуем заново
+    if (!document.getElementById('view')?.children.length) { current = null; route(); }
     hideSplash();
     // OAuth/PKCE возвращает ?code=… — после обмена чистим адрес
     if (location.search.includes('code=')) history.replaceState(null, '', location.pathname + (location.hash || '#/profile'));

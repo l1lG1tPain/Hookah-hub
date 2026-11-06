@@ -8,12 +8,23 @@
   # URL проекта и anon-ключ Supabase публичны по замыслу и обязаны быть в бандле фронта (VITE_*).
   # Сканер секретов Netlify видит их значения в dist и валит деплой — исключаем только их.
   # SUPABASE_SERVICE_ROLE и TELEGRAM_BOT_TOKEN по-прежнему проверяются.
-  SECRETS_SCAN_OMIT_KEYS = "SUPABASE_URL,SUPABASE_ANON_KEY,VITE_SUPABASE_URL,VITE_SUPABASE_ANON_KEY,TELEGRAM_BOT_USERNAME"
+  SECRETS_SCAN_OMIT_KEYS = "VITE_VAPID_PUBLIC_KEY,SUPABASE_URL,SUPABASE_ANON_KEY,VITE_SUPABASE_URL,VITE_SUPABASE_ANON_KEY,TELEGRAM_BOT_USERNAME"
 
 # Остались только функции входа через Telegram
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
+  status = 200
+
+# Ссылки для шаринга с превью: /m/<id> (микс), /t/<id> (табак)
+[[redirects]]
+  from = "/m/:id"
+  to = "/.netlify/functions/share?type=m&id=:id"
+  status = 200
+
+[[redirects]]
+  from = "/t/:id"
+  to = "/.netlify/functions/share?type=t&id=:id"
   status = 200
 
 [[headers]]

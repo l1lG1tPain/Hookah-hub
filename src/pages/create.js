@@ -1,5 +1,8 @@
 import { html, icon, setHTML, toast, sheet, toNode, debounce, esc } from '../lib/ui.js';
-import { listAllTobaccos, createMix } from '../lib/api.js';
+import { listAllTobaccos, createMix, attachImage } from '../lib/api.js';
+import { DEMO } from '../lib/supabase.js';
+import { photoField, bindPhoto } from '../lib/photo.js';
+import { openTobaccoSheet } from '../lib/tobaccoForm.js';
 import { state, subscribe, refreshUser } from '../lib/store.js';
 import { TASTES } from '../lib/tastes.js';
 
@@ -59,11 +62,14 @@ function form(el) {
           <textarea class="input input--area" name="description" maxlength="1000" rows="4" placeholder="Как забивать, чем хорош, с чем пить…"></textarea>
         </label>
 
+        ${DEMO ? '' : photoField('Добавить фото микса')}
+
         <button class="btn btn--accent btn--lg" type="submit" id="submit">Опубликовать микс</button>
       </form>
     </div>`);
 
     const $ = (s) => el.querySelector(s);
+    const photo = DEMO ? null : bindPhoto(el);
     const sum = () => st.rows.reduce((a, r) => a + (Number(r.p) || 0), 0);
 
     function paintRows() {
@@ -145,6 +151,8 @@ function form(el) {
                 tags: [...st.tags],
                 ingredients: st.rows.map((r) => (r.t.id ? { tobacco_id: r.t.id, percent: +r.p } : { custom_title: r.t.name, percent: +r.p })),
             });
+            const img = photo?.get();
+            if (img) { try { await attachImage('mix', id, img); } catch (er) { toast(er.message || 'Фото не загрузилось', 'err'); } }
             toast('Микс опубликован 🎉');
             refreshUser();
             location.hash = `#/mix?id=${encodeURIComponent(id)}`;
@@ -179,12 +187,19 @@ function pickTobacco(onPick) {
           ${[...groups].map(([b, ts]) => html`<div class="picker__group"><div class="picker__brand">${b}</div>
             ${ts.map((t) => html`<button type="button" class="picker__item" data-id="${t.id}">${t.name}</button>`)}</div>`)}
           ${q.length >= 2 ? html`<button type="button" class="picker__custom" data-custom="1">${icon('plus')} Добавить «${input.value.trim()}» как свой табак</button>` : ''}
-          ${!found.length && q.length < 2 ? html`<div class="muted small">Ничего не нашли</div>` : ''}`);
+          ${!found.length && q.length < 2 ? html`<div class="muted small">Ничего не нашли</div>` : ''}
+          <button type="button" class="picker__custom picker__custom--new" data-new="1">${icon('plus')} Нет в каталоге? Добавить табак и бренд</button>`);
     };
 
     list.addEventListener('click', (e) => {
         const it = e.target.closest('[data-id]');
         if (it) { onPick(catalog.find((t) => String(t.id) === it.dataset.id)); s.close(); return; }
+        if (e.target.closest('[data-new]')) {
+            const name = input.value.trim();
+            s.close();
+            openTobaccoSheet({ name, onCreated: (t) => { catalog?.push(t); onPick(t); } });
+            return;
+        }
         if (e.target.closest('[data-custom]')) {
             onPick({ id: null, name: input.value.trim().slice(0, 60), brand_name: '' });
             s.close();
