@@ -12,8 +12,12 @@ async function rest(path) {
 }
 
 export const handler = async (event) => {
-    const type = event.queryStringParameters?.type === 't' ? 'tobacco' : 'mix';
-    const id = String(event.queryStringParameters?.id || '').trim();
+    // Netlify не всегда подставляет :id в query редиректа, поэтому берём тип и id из самого пути (/m/<id>, /t/<id>)
+    const qs = event.queryStringParameters || {};
+    const pm = String(event.rawUrl || event.path || '').split('?')[0].match(/\/([mt])\/([^/?#]+)\/?$/);
+    const type = (pm ? pm[1] : qs.type) === 't' ? 'tobacco' : 'mix';
+    let id = '';
+    try { id = decodeURIComponent(pm ? pm[2] : String(qs.id || '')).trim(); } catch { id = ''; }
     const target = `${SITE}/#/${type}?id=${encodeURIComponent(id)}`;
     let title = 'Hookah Hub', desc = 'Миксы, табаки и честный рейтинг от любителей кальяна.', image = `${SITE}/og.png`;
 

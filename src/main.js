@@ -112,6 +112,10 @@ async function boot() {
     shell();
     installFavHandler();
     subscribe(paintUser);
+    // Если оболочку отдали по адресу /m/<id> или /t/<id> (старый service worker, офлайн) — переводим в хэш-маршрут,
+    // иначе откроется главная вместо микса/табака.
+    const sl = location.pathname.match(/^\/([mt])\/([^/]+)\/?$/);
+    if (sl) history.replaceState(null, '', `/#/${sl[1] === 'm' ? 'mix' : 'tobacco'}?id=${sl[2]}`);
     if (!location.hash) history.replaceState(null, '', location.pathname + location.search + '#/');
     window.addEventListener('hashchange', route);
     window.addEventListener('pageshow', () => { if (!document.getElementById('view')?.children.length) { current = null; route(); } });
