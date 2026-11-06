@@ -9,6 +9,7 @@ import { installFavHandler, syncFavButtons } from './components.js';
 import { applyTheme } from './theme.js';
 import { initPwa } from './lib/pwa.js';
 import { startSplash, hideSplash } from './splash.js';
+import { initUpdates } from './lib/update.js';
 
 import { HomePage } from './pages/home.js';
 import { TopPage } from './pages/top.js';
@@ -134,6 +135,4 @@ boot().catch((e) => {
     document.getElementById('app').innerHTML = `<div class="fatal">Что-то пошло не так: ${esc(e.message)}</div>`;
 });
 
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
-    window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
-}
+if (import.meta.env.PROD) window.addEventListener('load', initUpdates);
