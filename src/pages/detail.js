@@ -55,7 +55,7 @@ export function DetailPage(el, type, id) {
 
           <div class="detail__wrap">
             <header class="detail__head">
-              <p class="eyebrow">${type === 'mix' ? 'Микс' : html`Табак${x.brand_name ? html` · <b>${x.brand_name}</b>` : ''}`}</p>
+              <p class="eyebrow">${type === 'mix' ? 'Микс' : html`Табак${x.brand_name ? html` · <b>${x.brand_name}</b>${x.line_name ? ` · ${x.line_name}` : ''}` : ''}`}</p>
               <h1 class="display display--sm">${x.name}</h1>
               ${x.tags?.length ? html`<div class="card__tags">${x.tags.map((t) => html`<span class="tag">${t}</span>`)}</div>` : ''}
               ${type === 'mix' ? html`<div id="author" class="author-slot"></div>` : ''}

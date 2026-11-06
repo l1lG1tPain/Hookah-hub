@@ -44,6 +44,8 @@ const normTobacco = (x) => ({
     name: x.name,
     cover_url: x.cover_url ?? x.image_url ?? null,
     brand_name: x.brand_name || '',
+    line_name: x.line_name || '',
+    description: x.description || '',
     tags: x.tags ?? [],
     votes: Number(x.votes) || 0,
     avg_score: x.avg_score != null ? Number(x.avg_score) : null,
