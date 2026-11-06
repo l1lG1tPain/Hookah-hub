@@ -84,7 +84,13 @@ function route() {
     view.id = 'view'; view.className = 'view enter';
     old.replaceWith(view);
     window.scrollTo({ top: 0 });
-    cleanup = routes[path](view, params) || null;
+    try {
+        cleanup = routes[path](view, params) || null;
+    } catch (e) {
+        console.error(e);
+        cleanup = null;
+        view.innerHTML = '<div class="empty"><p>Не удалось загрузить страницу.</p><a class="btn btn--accent" href="#/" onclick="location.reload()">Обновить</a></div>';
+    }
 }
 
 function paintUser() {
