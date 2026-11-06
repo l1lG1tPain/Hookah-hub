@@ -5,7 +5,9 @@ import {
     state, subscribe, signInWithGoogle, sendEmailCode, verifyEmailCode,
     telegramStart, telegramPoll, signOut, refreshUser,
 } from '../lib/store.js';
-import { updateName } from '../lib/api.js';
+import { updateName, attachImage, clearAvatar } from '../lib/api.js';
+import { compressImage } from '../lib/photo.js';
+import { DEMO } from '../lib/supabase.js';
 import { rowItem, card } from '../components.js';
 import { getTheme, setTheme } from '../theme.js';
 import { installCard, installMode, bindInstall } from '../lib/pwa.js';
@@ -154,7 +156,7 @@ function user(el) {
 
     setHTML(el, html`<div class="profile">
       <section class="me panel">
-        ${avatar(u, 'avatar--xl')}
+        ${DEMO ? avatar(u, 'avatar--xl') : html`<button class="avatar-edit" id="avatarBtn" aria-label="Сменить фото">${avatar(u, 'avatar--xl')}<span class="avatar-edit__badge">${icon('edit')}</span></button>`}
         <div class="me__info">
           <div class="me__name"><h1>${u.name}</h1><button class="icon-btn" id="edit" aria-label="Изменить имя">${icon('edit')}</button></div>
           <div class="me__meta"><span class="mono">#${u.short}</span> · вход через ${PROVIDERS[u.provider] || u.provider || '—'}${u.email ? html` · ${u.email}` : ''}</div>
@@ -196,6 +198,7 @@ function user(el) {
 
     const $ = (s) => el.querySelector(s);
     $('#edit').onclick = () => editName(u.name);
+    $('#avatarBtn')?.addEventListener('click', () => editAvatar(u));
     $('#logout').onclick = async () => { await signOut(); toast('Вы вышли из аккаунта'); };
     $('#theme').onclick = (e) => {
         const b = e.target.closest('[data-theme]'); if (!b) return;
@@ -237,6 +240,27 @@ async function loadMyRatings(box) {
     } catch {
         setHTML(box, html`<div class="empty"><b>Не удалось загрузить</b></div>`);
     }
+}
+
+function editAvatar(u) {
+    const s = sheet(html`<div class="nameform">
+        <h2 class="h2">Фото профиля</h2>
+        <label class="btn btn--accent btn--lg" style="text-align:center;cursor:pointer">Выбрать фото<input type="file" accept="image/*" id="avFile" hidden></label>
+        ${u.avatar_url ? html`<button class="btn btn--ghost" id="avDel" type="button">Убрать фото</button>` : ''}
+      </div>`);
+    s.body.querySelector('#avFile').onchange = async (e) => {
+        const file = e.target.files?.[0]; if (!file) return;
+        try {
+            toast('Загружаем…');
+            const img = await compressImage(file);
+            await attachImage('avatar', null, img);
+            await refreshUser(); s.close(); toast('Фото обновлено');
+        } catch (err) { toast(err.message || 'Не удалось загрузить фото', 'err'); }
+    };
+    s.body.querySelector('#avDel')?.addEventListener('click', async () => {
+        try { await clearAvatar(); await refreshUser(); s.close(); toast('Фото убрано'); }
+        catch { toast('Не удалось убрать фото', 'err'); }
+    });
 }
 
 function editName(current) {

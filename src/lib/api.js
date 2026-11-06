@@ -338,6 +338,9 @@ export async function attachImage(type, id, { blob, type: mime, ext }) {
     return data.publicUrl;
 }
 
+/** Убрать свою аватарку (вернутся инициалы) */
+export const clearAvatar = () => (DEMO ? demoOff() : rpc('hh_set_image', { p_type: 'avatar', p_id: null, p_url: null }));
+
 /* ---------------- пуш-подписки ---------------- */
 export const pushSubscribe = (sub) => rpc('hh_push_subscribe', { p_endpoint: sub.endpoint, p_p256dh: sub.keys.p256dh, p_auth: sub.keys.auth, p_ua: navigator.userAgent });
 export const pushStatus = (endpoint) => rpc('hh_push_status', { p_endpoint: endpoint });
