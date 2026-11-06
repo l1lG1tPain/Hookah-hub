@@ -6,7 +6,7 @@
 > и синхронизируйте его копию в claude.ai Project «Hookah hub» (doc `claude/ARCHITECTURE.md`).
 > Порядок обновления — в разделе [«Как поддерживать этот файл»](#как-поддерживать-этот-файл).
 
-_Последнее обновление: 2026-11-06._
+_Последнее обновление: 2026-11-06 (каталог: 17 брендов, 1207 табаков, 78 миксов; починка деплоя на Netlify; загрузка каталога без лимита в 1000 строк)._
 
 ---
 
@@ -65,7 +65,8 @@ Telegram ──► /api/tg-webhook ──────┘  (бот подтвер
 index.html                 оболочка; inline-скрипт ставит тему до загрузки (без мигания)
 package.json               скрипты: dev, dev:demo, build (vite + build-sw), netlify:dev
 build-sw.mjs               генерирует dist/sw.js (workbox): precache оболочки + кэш картинок
-netlify.toml               publish=dist, functions=netlify/functions, /api/* → functions, заголовки кэша
+netlify.toml               publish=dist, functions=netlify/functions, /api/* → functions, заголовки кэша,
+                           SECRETS_SCAN_OMIT_KEYS для публичных значений Supabase (см. раздел 9)
 .env.example               список переменных окружения
 README.md                  запуск и первичная настройка (для людей)
 ARCHITECTURE.md            этот файл (для агентов и людей)
@@ -115,6 +116,11 @@ supabase/
   migrations/20261106_supabase_auth.sql   Supabase Auth, RPC hh_*, RLS, админ-схема hh_admin
   migrations/20261106_user_mixes.sql      свои миксы, автор, hh_create_mix/hh_delete_mix
   seed/20261106_catalog.sql               каталог: Darkside 35, Black Burn 33, MustHave 38 + 26 миксов
+  seed/20261106_catalog_expansion.sql     расширение: +8 брендов, 24 линейки, +1089 табаков, +40 миксов
+                                          (применён в прод 2026-11-06; идемпотентный).
+                                          ⚠️ В папке пользователя и в git этого файла НЕТ: его применила
+                                          другая сессия прямо в базе. Данные в БД есть; файл при
+                                          необходимости восстановить выгрузкой из БД.
 ```
 
 `_old/` — локальный бэкап прежней версии (в `.gitignore`), не используется.
@@ -148,11 +154,11 @@ supabase/
 | Таблица | Ключевые колонки | Примечание |
 |---|---|---|
 | `users` | `id uuid PK`, `tg_id bigint unique null`, `name text not null`, `avatar_url`, `auth_id uuid unique → auth.users`, `email`, `provider`, `name_changed`, `created_at`, `last_seen_at` | профиль; RLS вкл., политик нет |
-| `brands` | `id uuid`, `name` | RLS + публичный SELECT. Имена: `DarkSide`, `MustHave`, `Black Burn`, `Element`, `Tangiers`, `Fumari`, `Al Fakher`, `Serbetli`, `BURN` |
-| `lines` | `id`, `brand_id`, `name` | пока пусто |
-| `tobaccos` | `id uuid`, `brand_id`, `line_id`, `name`, `taste_tags text[]`, `image_url`, `created_at` | RLS + публичный SELECT |
-| `mixes` | `id uuid`, `author_id → users.id`, `title`, `description`, `taste_tags text[]`, `image_url`, `is_published`, `created_at`, `updated_at` | RLS + публичный SELECT |
-| `mix_ingredients` | `mix_id → mixes`, `tobacco_id → tobaccos null`, `custom_title`, `percent numeric`, `pos int` | unique (mix_id,pos), (mix_id,tobacco_id). Без tobacco_id используется custom_title («свой табак») |
+| `brands` | `id uuid`, `name unique` | RLS + публичный SELECT. 17 брендов: `DarkSide`, `MustHave`, `Black Burn`, `BURN`, `Element`, `Tangiers`, `Fumari`, `Al Fakher`, `Serbetli`, `Adalya`, `Daily Hookah`, `Spectrum`, `Bonche`, `Satyr`, `Chabacco`, `Afzal`, `Nakhla`. Фронт берёт список брендов отсюда (`listBrands`) |
+| `lines` | `id`, `brand_id`, `name`, unique (brand_id,name) | 24 линейки: DarkSide Core/Base/Shake/Xperience, Element Water/Earth/Air, Tangiers Noir, Black Burn HiT, Serbetli Hard Line, Spectrum Classic/Hard Line/Mix/Kitchen, Daily Hookah Formula/Starline, Satyr Aroma/Brilliant/Old School, Chabacco Medium/Emotions/Mix, Nakhla Classic/Mizo. Фронт линейки пока не показывает |
+| `tobaccos` | `id uuid`, `brand_id`, `line_id`, `name`, `taste_tags text[]`, `image_url`, `created_at` | RLS + публичный SELECT. **unique (brand_id, name)**. 1207 позиций. Названия английские, как на банках (у Daily Hookah — русские). У Element один вкус выходит в нескольких линейках, поэтому линейка входит в название: `Raspberry (Water)`, `Raspberry (Earth)` |
+| `mixes` | `id uuid`, `author_id → users.id`, `title`, `description`, `taste_tags text[]`, `image_url`, `is_published`, `created_at`, `updated_at` | RLS + публичный SELECT; unique (author_id,title) |
+| `mix_ingredients` | `mix_id → mixes`, `tobacco_id → tobaccos null`, `custom_title`, `percent numeric`, `pos int` | PK (mix_id,pos), unique (mix_id,tobacco_id). Без tobacco_id используется custom_title («свой табак») |
 | `mix_ratings` | `mix_id`, `user_id`, `score score_enum`, `updated_at` | PK (mix_id,user_id); RLS, политик нет |
 | `tobacco_ratings` | `tobacco_id`, `user_id`, `score score_enum`, `updated_at` | unique (tobacco_id,user_id); RLS |
 | `favorites` | `user_id`, `item_type text ('mix'/'tobacco')`, `item_id uuid`, `created_at` | RLS |
@@ -162,11 +168,19 @@ supabase/
 `score_enum` = `excellent | good | ok | bad | notgood` ↔ на фронте **5..1**
 (`hh_score_int` / `hh_score_label`). Подписи в UI: 💯 Отлично, 🔥 Хорошо, 😎 Пойдёт, 🙂 Так себе, 😐 Не зашло.
 
+**Вкусовые теги** (`taste_tags` у табаков и миксов, совпадают с `TASTES`): `ананасовый, десертный, кислосладкий,
+кислый, мятный, напиток, пряный, свежий, сладкий, табачный, травяной, тропический, фруктовый, цветочный,
+цитрус, яблочный, ягодный`. Новые табаки размечены по названию и описаниям магазинов (до 3 тегов);
+у ~85 позиций с «говорящими» названиями (Satyr Aroma, Tangiers Kosmik и т. п.) теги пустые.
+
 ### Представления (читает браузер, `security_invoker = false`, grant anon)
 - `mixes_with_stats`: mixes + `votes, excellent..notgood, avg_score` (из `mix_rating_stats`).
 - `tobaccos_api`: `id, name, cover_url, tags, brand_name, created_at, votes, excellent..notgood, avg_score`.
 - `mix_ingredients_api`: `mix_id, pos, percent, brand, tobacco, custom_title`.
 - `mix_rating_stats`, `tobacco_rating_stats`, `mixes_api`: служебные и старые.
+
+**Лимит PostgREST:** один запрос отдаёт максимум 1000 строк. Всё, что может превысить этот объём
+(например, полный список табаков), грузится постранично через `.range()` (см. `listAllTobaccos`).
 
 ### RPC-функции (`SECURITY DEFINER`, `search_path = public`)
 
@@ -197,7 +211,8 @@ supabase/
 - Supabase → Authentication → Users: все аккаунты и последний вход.
 
 Служебный автор каталога: пользователь с именем **`Hookah Hub`** (бывшие `Seeder`/`Demo`).
-На фронте у него аватар-логотип.
+В `users` таких строк две (`ea8c18a6-…` и `63fb2801-…`); миксы каталога принадлежат той, у которой их больше
+(seed выбирает автора запросом, а не по id). На фронте у него аватар-логотип.
 
 ---
 
@@ -241,12 +256,15 @@ Redirect URLs: `https://hookahhub.netlify.app/**`, `http://localhost:8888/**`, `
 - **Поиск на главной:** кнопка 🔍 справа от табов раскрывает панель `.searchbar.open`
   (в закрытом виде `max-height:0; visibility:hidden`). Повторное нажатие закрывает панель и сбрасывает запрос.
   Фильтры главной хранятся в памяти модуля и переживают переходы между страницами.
+  Списки на главной ограничены 60 карточками на запрос (сортировка и фильтры работают на сервере).
 - **Поделиться:** своё окно `shareLink()`: Telegram (`t.me/share/url`), WhatsApp (`wa.me`),
   «Ссылка», «Текст и ссылка», при наличии ещё системное меню. Копирование через `copyText` с фоллбеком на `execCommand`.
 - **Защита контента:** `user-select: none` на body (кроме input/textarea), картинки с `pointer-events:none`,
   `draggable=false`, без контекстного меню.
 - **Конструктор микса:** 1–6 строк, проценты кнопками ±5 или вручную, «Поровну», полоска состава,
   до 4 вкусов из `TASTES`. Выбор табака — шторка с поиском по `listAllTobaccos()` или «свой табак» (custom_title).
+  `listAllTobaccos()` грузит все 1207+ табаков **постранично по 1000** и кэширует в модуле;
+  в шторке без запроса показываются первые 80, поиск идёт по всему списку.
 - **Демо-режим:** `npm run dev:demo` или отсутствие `VITE_SUPABASE_*`. Данные из `demo.js`,
   вход мгновенный, своё хранится в `localStorage` (`hh-demo-*`). Сверху показывается баннер.
 
@@ -266,7 +284,7 @@ Redirect URLs: `https://hookahhub.netlify.app/**`, `http://localhost:8888/**`, `
 
 ---
 
-## 9. Окружение и запуск
+## 9. Окружение, запуск и деплой
 
 | Переменная | Где | Зачем |
 |---|---|---|
@@ -283,8 +301,14 @@ npm run netlify:dev   # :8888 — фронт + функции (полный ло
 npm run build         # dist/ + sw.js
 ```
 
-Деплой: push в GitHub, Netlify собирает `npm run build`. Новые функции входа через Telegram
-заработают в проде только после деплоя.
+**Деплой:** push в `main` на GitHub → Netlify собирает `npm run build` и публикует `dist/` и функции.
+Статус и логи — Netlify → hookahhub → Deploys.
+
+**Сканер секретов Netlify.** Netlify ищет значения env-переменных в готовой сборке. URL и anon-ключ Supabase
+публичны и обязаны быть в бандле, поэтому они исключены через `SECRETS_SCAN_OMIT_KEYS` в `netlify.toml`.
+Без этого деплой падает с «Secrets scanning found secrets in build» (так упал первый деплой коммита `fc97899`).
+**Никогда не добавляйте в это исключение `SUPABASE_SERVICE_ROLE` или `TELEGRAM_BOT_TOKEN`**: если сканер
+нашёл их в `dist`, это настоящая утечка.
 
 ---
 
@@ -304,6 +328,9 @@ npm run build         # dist/ + sw.js
     на служебном шаге, при этом данные записываются. Всегда проверяйте результат отдельным SELECT.
     Лучше избегать temp-таблиц и использовать `VALUES`/CTE.
   - Результаты в гриде виртуализированы (видно ~13 строк): агрегируйте вывод в одну строку (`string_agg`/`json_agg`).
+  - Агент в браузере: вставлять SQL через `monaco.editor.getEditors()[0].setValue(sql)` (не через `getModels()[0]` —
+    редактор может откатить текст к сохранённому сниппету), затем кнопка Run; результат читать из
+    `[role="gridcell"]`. Большой SQL передавать gzip+base64 и распаковывать `DecompressionStream`, сверяя контрольную сумму.
 - Новые таблицы с данными пользователей: включайте RLS и давайте доступ только через `hh_*` RPC с `hh_uid()`.
 - Новые представления для каталога: `security_invoker = false` + `grant select … to anon, authenticated`.
 
@@ -315,11 +342,18 @@ npm run build         # dist/ + sw.js
   Нужно перевыпустить в Supabase → API Keys и обновить в Netlify и `.env`.
 - Закрыто: старые функции принимали `x-tg-id` (можно было действовать от имени любого пользователя);
   `users`/`sessions` раньше читались anon-ключом. Теперь RLS.
+- **Состояние git и деплоя (2026-11-06):** новая версия запушена коммитом `fc97899`, но его деплой упал
+  на сканере секретов. Исправление (`SECRETS_SCAN_OMIT_KEYS` в `netlify.toml`) и пагинация каталога лежат
+  в рабочей копии пользователя и **ждут коммита и push**. До этого прод работает на старой версии
+  (старый UI и старые функции, включая дыру с `x-tg-id`).
 - Микс «Citrus Punch» в базе встречается дважды (дубль был до миграций). Удалять по решению владельца.
+- Есть пользовательский микс с оскорбительным названием (автор с именем «.»). Модерации нет; удалять по решению владельца.
 - Бренд «Everest» запрошен заказчиком, но такой кальянный табак не нашёлся. Ждём уточнения.
 - Google-вход: в Supabase провайдер ещё **не включён** (нет Client ID/Secret).
 - Supabase Free засыпает после 7 дней без запросов.
 - У большинства табаков и миксов нет фото (`image_url` пуст), используются генеративные обложки.
+- Файлы `.idea/*` и `netlify/functions/auth-start.js` в рабочей копии отличаются от git только переводами строк
+  (CRLF/LF); коммитить их не нужно.
 - Запись файлов агентом в папку пользователя (`device_commit_files`) может подставить **старую версию**,
   если тот же `stagedPath` уже использовался раньше. Для каждой записи берите **новый промежуточный путь**
   (например, `/mnt/user-data/outputs/<задача>-vN/…`) и **после записи сверяйте md5** с проверенной версией.
@@ -334,8 +368,12 @@ npm run build         # dist/ + sw.js
 - **Новое личное действие:** RPC `hh_*` в новой миграции (`hh_uid()`, revoke anon, grant authenticated) →
   функция в `api.js` (+ демо-ветка) → при необходимости `store.js`.
 - **Новый вкусовой тег:** `src/lib/tastes.js`.
-- **Пополнение каталога:** seed-SQL в `supabase/seed/` по образцу (идемпотентно, сопоставление по `lower(brand)+lower(name)`).
-  Названия вкусов брать из реальных источников, не выдумывать.
+- **Пополнение каталога:** seed-SQL в `supabase/seed/` по образцу `20261106_catalog_expansion.sql`:
+  `insert … select from (values …)` + `where not exists` по brand + нормализованному имени
+  (`regexp_replace(lower(name),'[^a-zа-яё0-9]','','g')`), `on conflict do nothing`, без DELETE/DROP/temp.
+  Названия вкусов брать из реальных источников (каталоги магазинов), не выдумывать; бренды писать как в `brands`.
+  **Файл seed обязательно сохраняйте в репозиторий**, а не только применяйте в базе.
+- **Большие выборки:** всё, что может превысить 1000 строк, грузите постранично (`.range()`).
 - **Проверка UI:** `npx vite build --mode demo && npx vite preview --mode demo` и скриншоты 390×844 и 1440×900.
 
 ---
@@ -345,5 +383,7 @@ npm run build         # dist/ + sw.js
 1. Изменили маршруты, таблицы, RPC, env, потоки входа или правила дизайна → правьте соответствующий раздел здесь.
 2. Обновите дату в шапке.
 3. Синхронизируйте с claude.ai Project «Hookah hub»: `Projects.project_write(path: "claude/ARCHITECTURE.md", local_path: <файл>)` — именно этот путь, чтобы заменить документ, а не создать новый.
+   **Перед записью сделайте `project_read`**: документ могла обновить другая сессия; объединяйте правки, а не затирайте их.
    Пишите только при реальных изменениях: каждая запись сбрасывает кэш промптов проекта.
-4. Мелкие правки (текст, стили одного компонента) этот файл не требуют.
+4. Держите копию в репозитории (`ARCHITECTURE.md`) и в проекте одинаковыми.
+5. Мелкие правки (текст, стили одного компонента) этот файл не требуют.

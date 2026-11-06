@@ -5,6 +5,10 @@
 
 [build.environment]
   NODE_VERSION = "22"
+  # URL проекта и anon-ключ Supabase публичны по замыслу и обязаны быть в бандле фронта (VITE_*).
+  # Сканер секретов Netlify видит их значения в dist и валит деплой — исключаем только их.
+  # SUPABASE_SERVICE_ROLE и TELEGRAM_BOT_TOKEN по-прежнему проверяются.
+  SECRETS_SCAN_OMIT_KEYS = "SUPABASE_URL,SUPABASE_ANON_KEY,VITE_SUPABASE_URL,VITE_SUPABASE_ANON_KEY,TELEGRAM_BOT_USERNAME"
 
 # Остались только функции входа через Telegram
 [[redirects]]

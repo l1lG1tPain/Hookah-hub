@@ -99,9 +99,10 @@ export async function listTobaccos({ q = '', tags = [], brands = [], sort = 'new
 
 export async function listBrands() {
     if (DEMO) return [...new Set(demoTobaccos.map((t) => t.brand_name))].sort();
-    const { data, error } = await supabase.from('tobaccos_api').select('brand_name').limit(1000);
+    // бренды из справочника: перебор табаков упирался бы в лимит PostgREST (1000 строк)
+    const { data, error } = await supabase.from('brands').select('name').order('name');
     if (error) return [];
-    return [...new Set(data.map((x) => x.brand_name).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+    return [...new Set(data.map((x) => x.name).filter(Boolean))];
 }
 
 export async function getMix(id) {
@@ -267,9 +268,16 @@ export async function authorsByIds(ids) {
 /** Все табаки для выбора в конструкторе микса */
 export async function listAllTobaccos() {
     if (DEMO) return demoTobaccos.map(normTobacco);
-    const { data, error } = await supabase.from('tobaccos_api').select('id,name,brand_name').order('brand_name').order('name').limit(2000);
-    if (error) throw error;
-    return data.map((x) => ({ id: x.id, name: x.name, brand_name: x.brand_name || '' }));
+    // PostgREST отдаёт максимум 1000 строк за запрос — забираем постранично
+    const PAGE = 1000, out = [];
+    for (let from = 0; from < 20000; from += PAGE) {
+        const { data, error } = await supabase.from('tobaccos_api').select('id,name,brand_name')
+            .order('brand_name').order('name').order('id').range(from, from + PAGE - 1);
+        if (error) throw error;
+        out.push(...data);
+        if (data.length < PAGE) break;
+    }
+    return out.map((x) => ({ id: x.id, name: x.name, brand_name: x.brand_name || '' }));
 }
 
 /** ingredients: [{ tobacco_id?, custom_title?, percent }] */
