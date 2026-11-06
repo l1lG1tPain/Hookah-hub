@@ -85,11 +85,12 @@ export function DetailPage(el, type, id) {
 
         el.querySelector('#back').onclick = back;
         el.querySelector('#share').onclick = () => {
-            const lines = [`${type === 'mix' ? 'Микс' : 'Табак'} «${x.name}» на Hookah Hub`];
-            if (x.brand_name) lines.push(`Бренд: ${x.brand_name}`);
-            if (x.ingredients?.length) lines.push(...x.ingredients.map((i) => `• ${i.brand ? i.brand + ' ' : ''}${i.tobacco} — ${i.percent}%`));
-            if (x.votes) lines.push(`Оценка: ${fmtScore(x.avg_score)}/5 (${votesText(x.votes)})`);
-            shareLink({ title: x.name, text: lines.join('\n'), url: location.href });
+            const lines = [`${type === 'mix' ? '🔥' : '💨'} ${type === 'mix' ? 'Микс' : 'Табак'} «${x.name}»${x.votes ? ` — ${fmtScore(x.avg_score)}/5` : ''}`];
+            if (x.brand_name) lines.push(`${x.brand_name}${x.line_name ? ' · ' + x.line_name : ''}`);
+            if (x.ingredients?.length) lines.push('', ...x.ingredients.map((i) => `▸ ${i.brand ? i.brand + ' ' : ''}${i.tobacco || i.custom_title} — ${i.percent}%`));
+            if (x.votes) lines.push('', `${votesText(x.votes)} на Hookah Hub`);
+            lines.push('', 'Забьём? 👇');
+            shareLink({ title: x.name, text: lines.join('\n'), url: location.href, item: x, type });
         };
         if (type === 'tobacco') loadRelated();
         if (type === 'mix') loadAuthor();

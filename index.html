@@ -19,8 +19,36 @@
             if (t === 'auto') t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
             document.documentElement.dataset.theme = t; } catch (e) {}
     </script>
+    <style>
+        #splash{position:fixed;inset:0;z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:center;
+            background:radial-gradient(120% 70% at 50% 28%,#2b1810 0%,#16110e 62%);color:#fff6ee;
+            padding:env(safe-area-inset-top) 24px calc(28px + env(safe-area-inset-bottom));transition:opacity .45s ease,visibility .45s}
+        html[data-theme=light] #splash{background:radial-gradient(120% 70% at 50% 28%,#fff3e6 0%,#f6efe8 62%);color:#2a1c12}
+        #splash.out{opacity:0;visibility:hidden}
+        .sp-main{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center}
+        .sp-shark{width:min(56vw,230px);height:auto;filter:drop-shadow(0 18px 34px rgba(255,122,61,.28));-webkit-mask-image:linear-gradient(#000 78%,transparent);mask-image:linear-gradient(#000 78%,transparent);animation:sp-float 3.2s ease-in-out infinite}
+        .sp-title{font:700 30px/1.1 'Unbounded Variable','Unbounded',system-ui,sans-serif;letter-spacing:-.03em;margin-top:6px}
+        .sp-title b{background:linear-gradient(100deg,#ff7a3d,#ffb547);-webkit-background-clip:text;background-clip:text;color:transparent}
+        .sp-phrase{min-height:22px;font:600 15px/1.4 'Manrope Variable','Manrope',system-ui,sans-serif;opacity:.7;transition:opacity .25s}
+        .sp-phrase.fade{opacity:0}
+        .sp-bar{width:140px;height:3px;border-radius:3px;background:rgba(255,160,90,.18);overflow:hidden;margin-top:4px}
+        .sp-bar i{display:block;width:40%;height:100%;border-radius:3px;background:linear-gradient(90deg,#ff7a3d,#ffb547);animation:sp-run 1.3s ease-in-out infinite}
+        .sp-foot{font:700 11px 'Manrope Variable','Manrope',system-ui,sans-serif;letter-spacing:.42em;opacity:.45;padding-left:.42em}
+        @keyframes sp-float{0%,100%{transform:translateY(0) rotate(-1.5deg)}50%{transform:translateY(-10px) rotate(1.5deg)}}
+        @keyframes sp-run{0%{transform:translateX(-110%)}100%{transform:translateX(360%)}}
+        @media (prefers-reduced-motion:reduce){.sp-shark,.sp-bar i{animation:none}}
+    </style>
 </head>
 <body>
+<div id="splash" role="status" aria-label="Загрузка">
+    <div class="sp-main">
+        <img class="sp-shark" src="/icons/shark.webp" alt="" width="230" height="230" draggable="false">
+        <div class="sp-title">Hookah <b>Hub</b></div>
+        <div class="sp-phrase" id="spPhrase">Раскуриваем угли…</div>
+        <div class="sp-bar"><i></i></div>
+    </div>
+    <div class="sp-foot">AKULKA PROJECTS</div>
+</div>
 <div id="app"></div>
 <script type="module" src="/src/main.js"></script>
 </body>

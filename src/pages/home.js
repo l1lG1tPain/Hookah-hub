@@ -3,6 +3,8 @@ import { listMixes, listTobaccos, listBrands } from '../lib/api.js';
 import { state as store, subscribe } from '../lib/store.js';
 import { card, href, favButton } from '../components.js';
 import { TASTES } from '../lib/tastes.js';
+import { makeGreeting } from '../lib/phrases.js';
+import { installCard, installMode, dismissed, bindInstall } from '../lib/pwa.js';
 
 
 const SORTS = [['new', 'Новые'], ['top', 'Лучшие'], ['popular', 'Популярные']];
@@ -12,15 +14,12 @@ const f = { tab: 'mixes', q: '', sort: 'new', tags: new Set(), brands: new Set()
 let brandsCache = null;
 let pickCache = null;
 
-function greeting() {
-    const h = new Date().getHours();
-    const name = store.user?.name?.split(' ')[0];
-    const part = h < 5 ? 'Доброй ночи' : h < 12 ? 'Доброе утро' : h < 18 ? 'Добрый день' : 'Добрый вечер';
-    return name ? `${part}, ${name}` : part;
-}
 
 export function HomePage(el) {
+    const greet = makeGreeting();
+    const greeting = () => greet(store.user?.name);
     setHTML(el, html`
+      <div id="installSlot"></div>
       <section class="hero">
         <div class="hero__text">
           <p class="eyebrow" id="greet">${greeting()}</p>
@@ -142,6 +141,14 @@ export function HomePage(el) {
     load();
     loadPick();
 
+    const paintInstall = () => {
+        const on = installMode() && !dismissed();
+        setHTML($('#installSlot'), on ? installCard({ compact: true }) : '');
+    };
+    paintInstall();
+    const offInstall = bindInstall(el, paintInstall);
+
     // имя в приветствии появится после входа
-    return subscribe(() => { const g = el.querySelector('#greet'); if (g) g.textContent = greeting(); });
+    const off = subscribe(() => { const g = el.querySelector('#greet'); if (g) g.textContent = greeting(); });
+    return () => { off(); offInstall(); };
 }

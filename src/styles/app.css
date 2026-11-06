@@ -643,3 +643,40 @@ a.author-chip:hover { background: var(--surface-3); }
 body:has(.sheet.open) .toasts { top: calc(16px + env(safe-area-inset-top)); bottom: auto; }
 .scorebox__none { font-family: var(--font-display); font-weight: 600; font-size: 20px; letter-spacing: -.02em; display: flex; align-items: center; gap: 10px; }
 .scorebox__none .ic { width: 28px; height: 28px; color: var(--muted); }
+
+/* ===== PWA: карточка установки ===== */
+.install { display: flex; align-items: center; gap: 14px; padding: 14px 16px; border-radius: var(--r-lg); border: 1px solid var(--line-2);
+    background: linear-gradient(135deg, var(--accent-soft), var(--surface)); margin-bottom: 16px; position: relative; }
+.install__shark { width: 54px; height: 54px; object-fit: contain; flex: none; pointer-events: none; }
+.install__text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.install__text b { font-family: var(--font-display); font-weight: 600; font-size: 15px; letter-spacing: -.02em; }
+.install__text span { font-size: 12.5px; color: var(--muted); line-height: 1.35; }
+.install .btn { flex: none; white-space: nowrap; }
+.install--compact { padding: 12px 40px 12px 12px; margin: 4px 0 14px; }
+.install--compact .install__shark { width: 44px; height: 44px; }
+.install__x { position: absolute; top: 4px; right: 4px; width: 32px; height: 32px; color: var(--muted); }
+@media (max-width: 420px) { .install { flex-wrap: wrap; } .install .btn { width: 100%; } .install--compact .btn { width: auto; } }
+.auth .install { margin: 18px 0 0; text-align: left; }
+
+/* iOS-инструкция */
+.iosguide { display: flex; flex-direction: column; gap: 10px; text-align: center; align-items: center; }
+.iosguide__logo { width: 64px; height: 64px; border-radius: 16px; }
+.iosguide .h2 { margin: 4px 0 0; }
+.iosguide__warn { padding: 10px 12px; border-radius: var(--r-sm); background: color-mix(in srgb, #ff5c5c 14%, transparent); font-size: 13px; text-align: left; }
+.iosguide__steps { list-style: none; padding: 0; margin: 8px 0 0; width: 100%; display: flex; flex-direction: column; gap: 10px; text-align: left; }
+.iosguide__steps li { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: var(--r); background: var(--surface-2); font-size: 14px; }
+.iosguide__ic { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; flex: none; background: var(--surface-3); color: var(--accent); }
+
+/* Шаринг: превью и сетка 3×2 */
+.share__preview { display: flex; align-items: center; gap: 12px; padding: 10px; margin: -4px 0 12px; border-radius: var(--r); background: var(--surface-2); }
+.share__preview > div { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+.share__preview b { font-family: var(--font-display); font-weight: 600; font-size: 15px; letter-spacing: -.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.share__preview span { font-size: 12.5px; color: var(--muted); }
+.share__cover { width: 56px; height: 56px; border-radius: 14px; flex: none; overflow: hidden; }
+.share__grid { grid-template-columns: repeat(3, 1fr); }
+.share__ic--hot { background: linear-gradient(135deg, var(--accent), var(--accent-2)); color: var(--accent-ink); }
+.share__btn:disabled { opacity: .5; }
+.install--compact { flex-wrap: nowrap !important; }
+.install--compact .install__text span { display: none; }
+.install--compact .install__text b { font-size: 14px; }
+.share__cover .cover__letter { font-size: 26px; }

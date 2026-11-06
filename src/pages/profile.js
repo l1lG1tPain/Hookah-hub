@@ -8,6 +8,7 @@ import {
 import { updateName } from '../lib/api.js';
 import { rowItem, card } from '../components.js';
 import { getTheme, setTheme } from '../theme.js';
+import { installCard, installMode, bindInstall } from '../lib/pwa.js';
 
 const PROVIDERS = { telegram: 'Telegram', google: 'Google', email: 'почту' };
 const isTouch = matchMedia('(pointer: coarse)').matches;
@@ -23,7 +24,12 @@ export function ProfilePage(el) {
         else user(el);
     };
     paint();
-    return subscribe(paint);
+    const off = subscribe(paint);
+    const offInstall = bindInstall(el, () => {
+        if (mode === 'user') { mode = ''; paint(); }
+        else if (!installMode()) el.querySelector('#installCard')?.remove();
+    });
+    return () => { off(); offInstall(); };
 }
 
 /* ============================== ГОСТЬ ============================== */
@@ -54,6 +60,7 @@ function guest(el) {
             <button class="btn btn--link" type="button" id="changeEmail">Другая почта</button>
           </div>
         </form>
+        ${installCard()}
         <p class="auth__note">Регистрация не нужна — аккаунт создастся при первом входе. Мы не публикуем ваши контакты.</p>
       </section>
     </div>`);
@@ -159,6 +166,8 @@ function user(el) {
         </div>
       </section>
 
+      ${installCard()}
+
       <section class="block">
         <div class="block__head"><h2 class="h2">Мои миксы</h2><a class="btn btn--sm btn--accent" href="#/create">${icon('plus')} Создать</a></div>
         <div class="grid grid--compact" id="myMixes"></div>
@@ -179,7 +188,7 @@ function user(el) {
         </div>
         <button class="setting setting--btn danger" id="logout">${icon('logout')} Выйти из аккаунта</button>
       </section>
-      <p class="foot muted small">Hookah Hub · сделано с 🦈 для любителей кальяна</p>
+      <p class="foot muted small">Hookah Hub · сделано с 🦈 для любителей кальяна<br><a href="/privacy.html" target="_blank">Конфиденциальность</a> · <a href="/terms.html" target="_blank">Условия</a></p>
     </div>`);
 
     const $ = (s) => el.querySelector(s);

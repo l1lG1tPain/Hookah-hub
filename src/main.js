@@ -7,6 +7,8 @@ import { DEMO } from './lib/supabase.js';
 import { initAuth, subscribe, state } from './lib/store.js';
 import { installFavHandler, syncFavButtons } from './components.js';
 import { applyTheme } from './theme.js';
+import { initPwa } from './lib/pwa.js';
+import { startSplash, hideSplash } from './splash.js';
 
 import { HomePage } from './pages/home.js';
 import { TopPage } from './pages/top.js';
@@ -63,7 +65,7 @@ function shell() {
 }
 
 let cleanup = null;
-let current = '';
+let current = null;
 function route() {
     const { path, params } = parse();
     const key = location.hash;
@@ -95,6 +97,8 @@ function protectMedia() {
 }
 
 async function boot() {
+    startSplash();
+    initPwa();
     applyTheme();
     protectMedia();
     shell();
@@ -102,13 +106,15 @@ async function boot() {
     subscribe(paintUser);
     window.addEventListener('hashchange', route);
     route();
-    await initAuth();
+    await initAuth().catch(() => {});
+    hideSplash();
     // OAuth/PKCE возвращает ?code=… — после обмена чистим адрес
     if (location.search.includes('code=')) history.replaceState(null, '', location.pathname + (location.hash || '#/profile'));
 }
 
 boot().catch((e) => {
     console.error(e);
+    hideSplash();
     document.getElementById('app').innerHTML = `<div class="fatal">Что-то пошло не так: ${esc(e.message)}</div>`;
 });
 

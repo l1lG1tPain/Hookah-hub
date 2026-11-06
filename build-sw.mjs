@@ -4,14 +4,14 @@ import { generateSW } from 'workbox-build';
 
 await generateSW({
     globDirectory: 'dist',
-    globPatterns: ['**/*.{html,js,css,woff2,png,svg,webmanifest}'],
+    globPatterns: ['**/*.{html,js,css,woff2,png,webp,svg,webmanifest}'],
     globIgnores: ['**/*-{vietnamese,greek,latin-ext}-*.woff2', 'sw.js', 'workbox-*.js'],
     swDest: 'dist/sw.js',
     clientsClaim: true,
     skipWaiting: true,
     cleanupOutdatedCaches: true,
     navigateFallback: '/index.html',
-    navigateFallbackDenylist: [/^\/api\//, /^\/\.netlify\//],
+    navigateFallbackDenylist: [/^\/privacy\.html/, /^\/terms\.html/, /^\/api\//, /^\/\.netlify\//],
     runtimeCaching: [
         {
             urlPattern: ({ url, request }) => request.destination === 'image' && url.pathname.includes('/storage/v1/object/public/'),

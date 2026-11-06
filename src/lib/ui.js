@@ -170,21 +170,24 @@ export async function copyText(text) {
     } catch { return false; }
 }
 
-export function shareLink({ title, text, url }) {
+export function shareLink({ title, text, url, item, type }) {
     const full = `${text}\n\n${url}`;
     const enc = encodeURIComponent;
+    const sub = item ? [type === 'mix' ? 'Микс' : 'Табак', item.brand_name, item.votes ? `★ ${fmtScore(item.avg_score)}` : ''].filter(Boolean).join(' · ') : '';
     const s = sheet(html`<div class="share">
         <h2 class="h2">Поделиться</h2>
-        <p class="muted small share__title">${title}</p>
+        ${item ? html`<div class="share__preview">${cover(item, 'share__cover')}
+          <div><b>${item.name}</b><span>${sub}</span></div></div>` : html`<p class="muted small share__title">${title}</p>`}
         <div class="share__grid">
           <a class="share__btn" data-x href="https://t.me/share/url?url=${enc(url)}&text=${enc(text)}" target="_blank" rel="noopener">
             <span class="share__ic share__ic--tg">${brandIcon.telegram}</span>Telegram</a>
           <a class="share__btn" data-x href="https://wa.me/?text=${enc(full)}" target="_blank" rel="noopener">
             <span class="share__ic share__ic--wa">${brandIcon.whatsapp}</span>WhatsApp</a>
+          ${item ? html`<button class="share__btn" data-img><span class="share__ic share__ic--hot">${icon('flame')}</span>Картинкой</button>` : ''}
           <button class="share__btn" data-copy="link"><span class="share__ic">${icon('copy')}</span>Ссылка</button>
           <button class="share__btn" data-copy="all"><span class="share__ic">${icon('share')}</span>Текст и ссылка</button>
+          ${navigator.share ? html`<button class="share__btn" data-native><span class="share__ic">${icon('plus')}</span>Ещё…</button>` : ''}
         </div>
-        ${navigator.share ? html`<button class="btn btn--ghost btn--lg" data-native>Другие приложения…</button>` : ''}
       </div>`);
     s.body.addEventListener('click', async (e) => {
         const c = e.target.closest('[data-copy]');
@@ -192,6 +195,20 @@ export function shareLink({ title, text, url }) {
             const ok = await copyText(c.dataset.copy === 'link' ? url : full);
             toast(ok ? (c.dataset.copy === 'link' ? 'Ссылка скопирована' : 'Скопировано') : 'Не удалось скопировать', ok ? '' : 'err');
             if (ok) s.close();
+        } else if (e.target.closest('[data-img]')) {
+            const btn = e.target.closest('[data-img]'); btn.disabled = true;
+            try {
+                const { makeShareCard } = await import('./sharecard.js');
+                const blob = await makeShareCard(item, type);
+                const file = new File([blob], 'hookah-hub.png', { type: 'image/png' });
+                if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], title, text: full }); }
+                else {
+                    const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'hookah-hub.png' });
+                    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000); toast('Картинка сохранена');
+                }
+                s.close();
+            } catch (err) { if (err?.name !== 'AbortError') toast('Не удалось собрать картинку', 'err'); }
+            btn.disabled = false;
         } else if (e.target.closest('[data-native]')) {
             try { await navigator.share({ title, text, url }); s.close(); }
             catch (err) { if (err?.name !== 'AbortError') toast('Системное меню недоступно — скопируйте ссылку', 'err'); }

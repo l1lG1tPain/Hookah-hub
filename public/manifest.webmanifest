@@ -1,5 +1,7 @@
 {
+  "id": "/",
   "name": "Hookah Hub",
+  "categories": ["lifestyle", "food"],
   "short_name": "Hookah Hub",
   "description": "Каталог кальянных миксов и табаков с оценками сообщества",
   "lang": "ru",
