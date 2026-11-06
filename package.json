@@ -1,8 +1,10 @@
 {
   "name": "hookah-hub",
+  "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:demo": "vite --mode demo",
     "build": "vite build && node build-sw.mjs",
     "preview": "vite preview",
     "netlify:dev": "netlify dev"
@@ -13,6 +15,9 @@
     "workbox-build": "^7.1.0"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.45.0"
+    "@fontsource-variable/manrope": "^5.2.0",
+    "@fontsource-variable/unbounded": "^5.2.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "qrcode-generator": "^1.4.4"
   }
 }

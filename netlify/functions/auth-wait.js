@@ -1,87 +1,79 @@
 // netlify/functions/auth-wait.js
+// Браузер опрашивает эту функцию, пока пользователь подтверждает вход в боте.
+// Когда бот отметил state как 'ok', выдаём одноразовый token_hash Supabase Auth —
+// фронт обменивает его на обычную Supabase-сессию (с авто-обновлением).
 import { createClient } from '@supabase/supabase-js';
-import crypto from 'node:crypto';
 
-function resp(status, body) {
-    return {
-        statusCode: status,
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(body),
-    };
-}
+const TTL_MS = 10 * 60 * 1000;
+const tgEmail = (tgId) => `tg${tgId}@telegram.hookahhub.app`;
 
 export const handler = async (event) => {
     try {
-        const { state } = event.queryStringParameters || {};
-        if (!state) return resp(400, { ok: false, error: 'no_state' });
+        const state = (event.queryStringParameters?.state || '').trim();
+        if (!/^[a-f0-9]{32}$/.test(state)) return json(400, { ok: false, error: 'bad_state' });
 
-        const url = process.env.SUPABASE_URL;
-        const key = process.env.SUPABASE_SERVICE_ROLE;
-        if (!url || !key) {
-            console.error('auth-wait: missing SUPABASE_URL or SUPABASE_SERVICE_ROLE');
-            return resp(500, { ok: false, error: 'srv_env_missing' });
+        const admin = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE, {
+            auth: { persistSession: false, autoRefreshToken: false },
+        });
+
+        const { data: st, error: stErr } = await admin
+            .from('login_states').select('*').eq('state', state).maybeSingle();
+        if (stErr) throw stErr;
+        if (!st) return json(404, { ok: false, error: 'state_not_found' });
+
+        const age = st.created_at ? Date.now() - new Date(st.created_at).getTime() : 0;
+        if (age > TTL_MS && st.status !== 'consumed') {
+            await admin.from('login_states').update({ status: 'expired' }).eq('state', state);
+            return json(200, { ok: false, error: 'expired' });
+        }
+        if (st.status === 'consumed') return json(200, { ok: false, error: 'consumed' });
+        if (st.status !== 'ok') return json(200, { ok: false, wait: true });
+
+        // Профиль, созданный ботом
+        const { data: profile, error: pErr } = await admin
+            .from('users').select('id, tg_id, name, avatar_url, auth_id').eq('id', st.user_id).maybeSingle();
+        if (pErr) throw pErr;
+        if (!profile?.tg_id) return json(200, { ok: false, error: 'user_not_found' });
+
+        const email = tgEmail(profile.tg_id);
+
+        // Гарантируем auth-пользователя (при первом входе создаём;
+        // SQL-триггер привяжет его к существующему профилю по tg_id)
+        if (!profile.auth_id) {
+            const { error: cErr } = await admin.auth.admin.createUser({
+                email,
+                email_confirm: true,
+                user_metadata: {
+                    provider: 'telegram',
+                    tg_id: String(profile.tg_id),
+                    name: profile.name,
+                    avatar_url: profile.avatar_url,
+                },
+            });
+            if (cErr && !/already|registered|exists/i.test(cErr.message || '')) throw cErr;
         }
 
-        const supabase = createClient(url, key);
+        // Одноразовая ссылка-токен для входа (письмо не отправляется)
+        const { data: link, error: lErr } = await admin.auth.admin.generateLink({ type: 'magiclink', email });
+        if (lErr) throw lErr;
 
-        // 1) запись о логине
-        const { data: st, error: stErr } = await supabase
-            .from('login_states')
-            .select('*')
-            .eq('state', state)
-            .maybeSingle();
-
-        if (stErr) {
-            console.error('auth-wait: login_states select error', stErr);
-            return resp(500, { ok: false, error: 'db_login_states', details: stErr.message || String(stErr) });
-        }
-        if (!st) return resp(404, { ok: false, error: 'state_not_found' });
-
-        // TTL 10 минут (если есть created_at)
-        const createdMs = st.created_at ? new Date(st.created_at).getTime() : null;
-        const isExpiredByTime = createdMs ? (Date.now() - createdMs > 10 * 60 * 1000) : false;
-        if (st.status === 'new' && isExpiredByTime) {
-            await supabase.from('login_states').update({ status: 'expired' }).eq('state', state);
-            return resp(200, { ok: false, error: 'expired' });
+        if (!profile.auth_id && link?.user?.id) {
+            await admin.from('users').update({ auth_id: link.user.id, email, provider: 'telegram' }).eq('id', profile.id);
         }
 
-        if (st.status !== 'ok') {
-            // ещё ждём подтверждение в Telegram
-            return resp(200, { ok: false, wait: true });
-        }
+        await admin.from('login_states').update({ status: 'consumed' }).eq('state', state);
 
-        // 2) найдём пользователя
-        const { data: user, error: uErr } = await supabase
-            .from('users')
-            .select('id')
-            .eq('id', st.user_id)
-            .maybeSingle();
-        if (uErr) {
-            console.error('auth-wait: users select error', uErr);
-            return resp(500, { ok: false, error: 'db_users', details: uErr.message || String(uErr) });
-        }
-        if (!user) return resp(200, { ok: false, error: 'user_not_found' });
-
-        // 3) создадим сессию (opaque token), 30 дней
-        const token = crypto.randomBytes(24).toString('hex');
-        const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-
-        const { error: sErr } = await supabase
-            .from('sessions')
-            .insert({ token, user_id: user.id, expires_at: expiresAt });
-
-        if (sErr) {
-            console.error('auth-wait: sessions insert error', sErr);
-            return resp(500, { ok: false, error: 'db_sessions', details: sErr.message || String(sErr) });
-        }
-
-        // 4) погасим state, чтобы не переиспользовали
-        await supabase.from('login_states').update({ status: 'consumed' }).eq('state', state);
-
-        // 5) фронту отдаём РОВНО то, что он ждёт
-        return resp(200, { ok: true, status: 'ok', session: token });
+        return json(200, { ok: true, token_hash: link.properties.hashed_token });
     } catch (e) {
-        console.error('auth-wait fatal', e);
-        return resp(500, { ok: false, error: 'fatal', details: e?.message || String(e) });
+        console.error('auth-wait error', e);
+        return json(500, { ok: false, error: 'internal' });
     }
 };
+
+function json(status, body) {
+    return {
+        statusCode: status,
+        headers: { 'content-type': 'application/json', 'cache-control': 'no-store' },
+        body: JSON.stringify(body),
+    };
+}

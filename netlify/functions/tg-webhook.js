@@ -102,33 +102,32 @@ async function handleLoginStart(msg, state, profileUrl) {
         return 'invalid';
     }
 
-    // 2) апсерт пользователя (+ попробуем подтянуть аватар)
-    const name = tg.first_name || tg.username || `user_${tgId}`;
-
-    let avatarUrl = null;
+    // 2) находим или создаём профиль (имя, выбранное в приложении, не перетираем)
+    const name = [tg.first_name, tg.last_name].filter(Boolean).join(' ') || tg.username || `user_${tgId}`;
+    let user = null;
     try {
-        const existing = await supabase
-            .from('users')
-            .select('id, avatar_url')
-            .eq('tg_id', tgId)
-            .maybeSingle();
-        if (!existing.data || !existing.data.avatar_url) {
-            avatarUrl = await fetchAvatarAndStore(tgId);
+        const { data: existing } = await supabase
+            .from('users').select('id, avatar_url').eq('tg_id', tgId).maybeSingle();
+        if (existing) {
+            user = existing;
+            if (!existing.avatar_url) {
+                const avatarUrl = await fetchAvatarAndStore(tgId).catch(() => null);
+                if (avatarUrl) await supabase.from('users').update({ avatar_url: avatarUrl }).eq('id', existing.id);
+            }
         } else {
-            avatarUrl = existing.data.avatar_url;
+            const avatarUrl = await fetchAvatarAndStore(tgId).catch(() => null);
+            const { data: created, error } = await supabase
+                .from('users')
+                .insert({ tg_id: tgId, name, avatar_url: avatarUrl, provider: 'telegram' })
+                .select('id').single();
+            if (error) throw error;
+            user = created;
         }
-    } catch {}
+    } catch (e) {
+        console.error('tg-webhook user upsert', e);
+    }
 
-    const { data: user, error: e2 } = await supabase
-        .from('users')
-        .upsert(
-            { tg_id: tgId, name, avatar_url: avatarUrl ?? null },
-            { onConflict: 'tg_id' }
-        )
-        .select()
-        .single();
-
-    if (e2) {
+    if (!user) {
         await sendMessage(chatId, `${BRAND}\n\n⚠️ Внутренняя ошибка. Попробуйте ещё раз позже.`);
         return 'error';
     }
@@ -157,7 +156,7 @@ async function handleStartPlain(msg, profileUrl) {
     await sendMessage(
         chatId,
         `${BRAND}\n\nПривет! Я помогу войти в приложение и сохранять ваши миксы.\n\n` +
-        `Чтобы войти:\n1) Откройте профиль на сайте\n2) Нажмите «Открыть в Telegram»\n3) Подтвердите вход здесь\n\n` +
+        `Чтобы войти:\n1) Откройте профиль на сайте\n2) Нажмите «Войти через Telegram»\n3) Подтвердите вход здесь\n\n` +
         `После подтверждения вернитесь в браузер — вы будете залогинены.`,
         profileUrl
             ? { reply_markup: { inline_keyboard: [[{ text: 'Открыть профиль', url: profileUrl }]] } }
@@ -171,7 +170,7 @@ async function handleHelp(msg, profileUrl) {
     await sendMessage(
         chatId,
         `${BRAND}\n\n<b>Помощь</b>\n\n` +
-        `• Вход в приложение — через кнопку «Открыть в Telegram» на странице профиля\n` +
+        `• Вход в приложение — через кнопку «Войти через Telegram» на странице профиля\n` +
         `• Избранное и оценки — в приложении\n` +
         `• Вопросы/идеи — смело пишите разработчику 👨‍💻`,
         profileUrl

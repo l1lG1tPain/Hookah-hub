@@ -3,16 +3,27 @@
   command = "npm run build"
   functions = "netlify/functions"
 
+[build.environment]
+  NODE_VERSION = "22"
+
+# Остались только функции входа через Telegram
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
 
 [dev]
   command = "vite"
   port = 8888
   targetPort = 5173
   functions = "netlify/functions"
-
-[build.environment]
-  NODE_VERSION = "22"
