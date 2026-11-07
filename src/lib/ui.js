@@ -175,6 +175,9 @@ export async function copyText(text) {
 /** Публичная ссылка на личную страницу: /u/<ник> (с превью) или, пока ника нет, прямой хэш-маршрут */
 export const profileUrl = (a) => a.handle ? `${location.origin}/u/${encodeURIComponent(a.handle)}` : `${location.origin}/#/author?id=${a.id}`;
 
+/** Публичная ссылка на заведение: /v/<slug> (с превью) */
+export const venueUrl = (v) => `${location.origin}/v/${encodeURIComponent(v.slug)}`;
+
 export const shareUrl = (type, id) => `${location.origin}/${type === 'mix' ? 'm' : 't'}/${encodeURIComponent(id)}`;
 
 export function shareLink({ title, text, url, item, type }) {

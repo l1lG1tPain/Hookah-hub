@@ -33,6 +33,12 @@
   to = "/.netlify/functions/share?type=u&id=:handle"
   status = 200
 
+# Страница заведения: /v/<slug>
+[[redirects]]
+  from = "/v/:slug"
+  to = "/.netlify/functions/share?type=v&id=:slug"
+  status = 200
+
 [[headers]]
   for = "/sw.js"
   [headers.values]

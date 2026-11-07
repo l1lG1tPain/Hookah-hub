@@ -19,6 +19,7 @@ import { DetailPage } from './pages/detail.js';
 import { CreatePage } from './pages/create.js';
 import { AuthorPage } from './pages/author.js';
 import { ComparePage } from './pages/compare.js';
+import { VenuePage } from './pages/venue.js';
 
 const routes = {
     '/': HomePage,
@@ -28,6 +29,7 @@ const routes = {
     '/create': CreatePage,
     '/author': AuthorPage,
     '/compare': ComparePage,
+    '/venue': VenuePage,
     '/mix': (el, p) => DetailPage(el, 'mix', p.get('id')),
     '/tobacco': (el, p) => DetailPage(el, 'tobacco', p.get('id')),
 };
@@ -115,8 +117,8 @@ async function boot() {
     subscribe(paintUser);
     // Если оболочку отдали по адресу /m/<id> или /t/<id> (старый service worker, офлайн) — переводим в хэш-маршрут,
     // иначе откроется главная вместо микса/табака.
-    const sl = location.pathname.match(/^\/([mtu])\/([^/]+)\/?$/);
-    if (sl) history.replaceState(null, '', sl[1] === 'u' ? `/#/author?h=${sl[2]}` : `/#/${sl[1] === 'm' ? 'mix' : 'tobacco'}?id=${sl[2]}`);
+    const sl = location.pathname.match(/^\/([mtuv])\/([^/]+)\/?$/);
+    if (sl) history.replaceState(null, '', sl[1] === 'u' ? `/#/author?h=${sl[2]}` : sl[1] === 'v' ? `/#/venue?s=${sl[2]}` : `/#/${sl[1] === 'm' ? 'mix' : 'tobacco'}?id=${sl[2]}`);
     if (!location.hash) history.replaceState(null, '', location.pathname + location.search + '#/');
     window.addEventListener('hashchange', route);
     window.addEventListener('pageshow', () => { if (!document.getElementById('view')?.children.length) { current = null; route(); } });

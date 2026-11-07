@@ -356,6 +356,85 @@ export async function attachImage(type, id, { blob, type: mime, ext }) {
 /** Убрать свою аватарку (вернутся инициалы) */
 export const clearAvatar = () => (DEMO ? demoOff() : rpc('hh_set_image', { p_type: 'avatar', p_id: null, p_url: null }));
 
+/* ---------------- заведения (B2B) ---------------- */
+const demoVenues = () => demoLS.get('venues', []);
+const saveDemoVenues = (v) => demoLS.set('venues', v);
+const venueMix = (x) => ({ ...normMix(x), note: x.note || '' });
+
+export async function getVenue(slug) {
+    const s = String(slug || '').toLowerCase();
+    if (DEMO) {
+        const v = demoVenues().find((x) => x.slug === s && !x.archived);
+        if (!v) return null;
+        const all = new Map((await listMixes({ limit: 300 })).map((m) => [m.id, m]));
+        return { ...v, mixes: v.menu.map((e) => all.get(e.id) && { ...all.get(e.id), note: e.note }).filter(Boolean) };
+    }
+    const { data, error } = await supabase.rpc('hh_venue_by_slug', { p_slug: s });
+    if (error) throw error;
+    return data ? { ...data, mixes: (data.mixes || []).map(venueMix) } : null;
+}
+
+export async function myVenues() {
+    if (DEMO) return demoVenues().filter((v) => !v.archived).map((v) => ({ ...v, role: 'owner', mixes: v.menu.length }));
+    return (await rpc('hh_my_venues')) || [];
+}
+
+export async function createVenue({ slug, name, city, description }) {
+    if (DEMO) {
+        const list = demoVenues(), s = slug.toLowerCase();
+        if (list.some((v) => v.slug === s)) throw new Error('Этот адрес уже занят');
+        const v = { id: crypto.randomUUID(), slug: s, name, city: city || null, description: description || null, logo_url: null, verified: false, menu: [] };
+        saveDemoVenues([...list, v]); return v;
+    }
+    return rpc('hh_venue_create', { p_slug: slug, p_name: name, p_city: city || null, p_description: description || null });
+}
+
+export async function updateVenue(id, { slug, name, city, description }) {
+    if (DEMO) {
+        saveDemoVenues(demoVenues().map((v) => (v.id === id ? { ...v, slug: slug.toLowerCase(), name, city: city || null, description: description || null } : v)));
+        return;
+    }
+    return rpc('hh_venue_update', { p_id: id, p_slug: slug, p_name: name, p_city: city || null, p_description: description || null });
+}
+
+export async function archiveVenue(id) {
+    if (DEMO) { saveDemoVenues(demoVenues().map((v) => (v.id === id ? { ...v, archived: true } : v))); return; }
+    return rpc('hh_venue_archive', { p_id: id, p_archived: true });
+}
+
+/** Меню: add/remove/reorder/note. В демо — localStorage. */
+export async function venueAddMix(venueId, mixId, note = '') {
+    if (DEMO) {
+        saveDemoVenues(demoVenues().map((v) => (v.id === venueId && !v.menu.some((e) => e.id === mixId) ? { ...v, menu: [...v.menu, { id: mixId, note }] } : v)));
+        return;
+    }
+    return rpc('hh_venue_add_mix', { p_venue: venueId, p_mix: mixId, p_note: note || null });
+}
+export async function venueRemoveMix(venueId, mixId) {
+    if (DEMO) { saveDemoVenues(demoVenues().map((v) => (v.id === venueId ? { ...v, menu: v.menu.filter((e) => e.id !== mixId) } : v))); return; }
+    return rpc('hh_venue_remove_mix', { p_venue: venueId, p_mix: mixId });
+}
+export async function venueReorder(venueId, ids) {
+    if (DEMO) {
+        saveDemoVenues(demoVenues().map((v) => (v.id === venueId ? { ...v, menu: ids.map((id) => v.menu.find((e) => e.id === id)).filter(Boolean) } : v)));
+        return;
+    }
+    return rpc('hh_venue_reorder', { p_venue: venueId, p_mix_ids: ids });
+}
+
+/** Логотип заведения: загрузка в user-images/<uid>/… и привязка */
+export async function uploadVenueLogo(venueId, { blob, type: mime, ext }) {
+    if (DEMO) demoOff();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error('Войдите, чтобы загружать фото');
+    const path = `${session.user.id}/${crypto.randomUUID()}.${ext}`;
+    const { error } = await supabase.storage.from('user-images').upload(path, blob, { contentType: mime, cacheControl: '31536000', upsert: false });
+    if (error) throw new Error('Не удалось загрузить логотип');
+    const { data } = supabase.storage.from('user-images').getPublicUrl(path);
+    await rpc('hh_venue_set_logo', { p_id: venueId, p_url: data.publicUrl });
+    return data.publicUrl;
+}
+
 /* ---------------- пуш-подписки ---------------- */
 export const pushSubscribe = (sub) => rpc('hh_push_subscribe', { p_endpoint: sub.endpoint, p_p256dh: sub.keys.p256dh, p_auth: sub.keys.auth, p_ua: navigator.userAgent });
 export const pushStatus = (endpoint) => rpc('hh_push_status', { p_endpoint: endpoint });

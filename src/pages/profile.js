@@ -7,6 +7,7 @@ import {
 } from '../lib/store.js';
 import { updateName, setProfile, attachImage, clearAvatar } from '../lib/api.js';
 import { profileShareSheet } from '../lib/profileShare.js';
+import { venuesBlock } from '../lib/venueManage.js';
 import { compressImage } from '../lib/photo.js';
 import { DEMO } from '../lib/supabase.js';
 import { rowItem, card } from '../components.js';
@@ -182,6 +183,8 @@ function user(el) {
 
       ${installCard()}
 
+      <section class="block" id="venuesBox"></section>
+
       <section class="block">
         <div class="block__head"><h2 class="h2">Мои миксы</h2><a class="btn btn--sm btn--accent" href="#/create">${icon('plus')} Создать</a></div>
         <div class="grid grid--compact" id="myMixes"></div>
@@ -219,6 +222,7 @@ function user(el) {
         $('#theme').querySelectorAll('button').forEach((x) => x.setAttribute('aria-selected', x === b));
     };
     pushBlock($('#pushBox'));
+    venuesBlock($('#venuesBox'));
     loadMyRatings($('#myRatings'));
     loadMyMixes($('#myMixes'), u.id);
 }

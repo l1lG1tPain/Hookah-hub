@@ -175,6 +175,7 @@ supabase/
 | `#/profile` | ProfilePage | гость → экран входа |
 | `#/create` | CreatePage | гость → призыв войти |
 | `#/author?id=<users.id>` или `#/author?h=<ник>` | AuthorPage | все (публичная ссылка `/u/<ник>` → share.js → `?h=`) |
+| `#/venue?s=<slug>` | VenuePage | все (публичная ссылка `/v/<slug>` → share.js → `?s=`; управление в профиле, `src/lib/venueManage.js`) |
 | `#/compare?a=<mix>&b=<mix>` | ComparePage | все |
 | `#/mix?id=<uuid>` | DetailPage('mix') | все; оценка требует входа |
 | `#/tobacco?id=<uuid>` | DetailPage('tobacco') | все |
@@ -203,6 +204,9 @@ supabase/
 | `favorites` | `user_id`, `item_type text ('mix'/'tobacco')`, `item_id uuid`, `created_at` | RLS |
 | `login_states` | `state text PK`, `status ('new','ok','consumed','expired')`, `user_id`, `tg_id`, `created_at` | вход через Telegram; TTL 10 мин |
 | `push_subscriptions` | `user_id`, `endpoint` unique, `p256dh`, `auth`, `notify_ratings/daily/news`, `last_rating_check`, `user_agent` | RLS без политик; доступ через `hh_push_*` и service role в функциях |
+| `venues` | `id`, `slug` (уникальный по lower), `name`, `logo_url`, `description`, `city`, `owner_id → users`, `verified`, `verified_at`, `archived_at`, `created_at`, `updated_at` | заведения (миграция `20261111_venues.sql`); RLS без политик; удаление мягкое (`archived_at`). `verified` ставит админ в SQL Editor: `update public.venues set verified = true, verified_at = now() where lower(slug) = '…'` |
+| `venue_members` | PK (`venue_id`, `user_id`), `role owner/staff`, `added_by`, `removed_at` | команда; сейчас пишется только `staff` (UI для staff нет, RPC есть) |
+| `venue_mixes` | PK (`venue_id`, `mix_id`), `pos`, `note`, `added_by`, `removed_at` | меню; `mix_id` с `on delete cascade` (иначе `hh_delete_mix` падает) |
 | `sessions` | устаревшая (старые токены x-session) | не используется, закрыта RLS |
 
 `score_enum` = `excellent | good | ok | bad | notgood` ↔ на фронте **5..1**
@@ -220,6 +224,7 @@ supabase/
   (нормализация в `api.js`, eyebrow и блок «Описание» в `detail.js`).
 - `mix_ingredients_api`: `mix_id, pos, percent, brand, tobacco, custom_title`.
 - `mix_rating_stats`, `tobacco_rating_stats`, `mixes_api`: служебные и старые.
+- `venues_api`: `id, slug, name, logo_url, city, verified, mixes_count` — незаархивированные заведения.
 
 **Лимит PostgREST:** один запрос отдаёт максимум 1000 строк. Всё, что может превысить этот объём
 (например, полный список табаков), грузится постранично через `.range()` (см. `listAllTobaccos`).
@@ -248,6 +253,15 @@ supabase/
 | `hh_delete_tobacco(id)` | authenticated | только свой и пока нет ингредиентов/оценок |
 | `hh_set_image(type, id, url)` | authenticated | `url` обязан быть из `user-images/<auth.uid()>/…`; микс — автор, табак — `created_by` |
 | `hh_push_subscribe/status/prefs/unsubscribe` | authenticated | подписки Web Push текущего устройства и их настройки |
+| `hh_venue_create(slug, name, city, description)` | authenticated | адрес 3–30 `[a-z0-9_-]` (без `-`/`_` по краям), зарезервированные запрещены; до 3 активных заведений и 1 создание в сутки |
+| `hh_venue_update(id, slug, name, city, description)` | owner | смена адреса/названия снимает `verified` |
+| `hh_venue_set_logo(id, url)` | owner/staff | `url` только из `user-images/<auth.uid()>/…` |
+| `hh_venue_archive(id, archived)` | owner | мягкое удаление |
+| `hh_venue_add_mix / remove_mix / reorder / set_note` | owner/staff | меню до 100 миксов, заметка ≤140; remove = `removed_at` |
+| `hh_venue_add_staff(venue, handle)` / `hh_venue_remove_staff(venue, user)` | owner | до 10 сотрудников |
+| `hh_my_venues()` | authenticated | заведения, где я owner или staff, с `role` и числом миксов |
+| `hh_venue_by_slug(slug)` | anon | публичная страница: поля заведения + `mixes[]` со статистикой оценок (без `owner_id`) |
+| `hh_venue_role`, `hh_venue_check` | внутр. | execute отозван у всех ролей |
 | `mix_rating_aggregate(uuid)` | старая | не используется фронтом |
 
 Триггер `hh_on_auth_user_created` на `auth.users` при регистрации вызывает `hh_link_profile`.

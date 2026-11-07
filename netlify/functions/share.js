@@ -3,6 +3,7 @@
 const SITE = process.env.SITE_URL || 'https://hookahhub.netlify.app';
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const HANDLE = /^[a-z0-9_]{3,20}$/i;
+const SLUG = /^[a-z0-9][a-z0-9_-]{1,28}[a-z0-9]$/i;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 async function rest(path) {
@@ -23,16 +24,28 @@ async function rpc(name, args) {
 export const handler = async (event) => {
     // Netlify не всегда подставляет :id в query редиректа, поэтому берём тип и id из самого пути (/m/<id>, /t/<id>)
     const qs = event.queryStringParameters || {};
-    const pm = String(event.rawUrl || event.path || '').split('?')[0].match(/\/([mtu])\/([^/?#]+)\/?$/);
+    const pm = String(event.rawUrl || event.path || '').split('?')[0].match(/\/([mtuv])\/([^/?#]+)\/?$/);
     const code = pm ? pm[1] : qs.type;
-    const type = code === 'u' ? 'user' : code === 't' ? 'tobacco' : 'mix';
+    const type = code === 'u' ? 'user' : code === 'v' ? 'venue' : code === 't' ? 'tobacco' : 'mix';
     let id = '';
     try { id = decodeURIComponent(pm ? pm[2] : String(qs.id || '')).trim(); } catch { id = ''; }
-    const target = type === 'user' ? `${SITE}/#/author?h=${encodeURIComponent(id)}` : `${SITE}/#/${type}?id=${encodeURIComponent(id)}`;
+    const target = type === 'user' ? `${SITE}/#/author?h=${encodeURIComponent(id)}`
+        : type === 'venue' ? `${SITE}/#/venue?s=${encodeURIComponent(id)}`
+        : `${SITE}/#/${type}?id=${encodeURIComponent(id)}`;
     let title = 'Hookah Hub', desc = 'Миксы, табаки и честный рейтинг от любителей кальяна.', image = `${SITE}/og.png`;
 
     try {
-        if (type === 'user') {
+        if (type === 'venue') {
+            if (SLUG.test(id)) {
+                const v = await rpc('hh_venue_by_slug', { p_slug: id });
+                if (v) {
+                    title = `${v.name}${v.city ? ' · ' + v.city : ''} — меню миксов на Hookah Hub`;
+                    const n = (v.mixes || []).length;
+                    desc = v.description || (n ? `Меню миксов: ${n}. Составы и оценки сообщества.` : desc);
+                    if (v.logo_url) image = v.logo_url;
+                }
+            }
+        } else if (type === 'user') {
             if (HANDLE.test(id)) {
                 const a = await rpc('hh_author_by_handle', { p_handle: id });
                 if (a) {
@@ -72,7 +85,7 @@ export const handler = async (event) => {
 <meta name="description" content="${esc(desc)}">
 <meta property="og:site_name" content="Hookah Hub"><meta property="og:type" content="website">
 <meta property="og:title" content="${esc(title)}"><meta property="og:description" content="${esc(desc)}">
-<meta property="og:image" content="${esc(image)}"><meta property="og:url" content="${SITE}/${type === 'user' ? 'u' : type === 'mix' ? 'm' : 't'}/${esc(id)}">
+<meta property="og:image" content="${esc(image)}"><meta property="og:url" content="${SITE}/${type === 'user' ? 'u' : type === 'venue' ? 'v' : type === 'mix' ? 'm' : 't'}/${esc(id)}">
 <meta name="twitter:card" content="summary_large_image">
 <meta http-equiv="refresh" content="0;url=${esc(target)}">
 <script>location.replace(${JSON.stringify(target)})</script></head>
