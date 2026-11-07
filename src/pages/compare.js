@@ -1,4 +1,4 @@
-import { html, icon, setHTML, sheet, debounce, fmtScore, votesText } from '../lib/ui.js';
+import { html, icon, setHTML, sheet, debounce, fmtScore, votesText, cover } from '../lib/ui.js';
 import { getMix, listMixes } from '../lib/api.js';
 import { hasRating } from '../lib/rating.js';
 import { href } from '../components.js';
@@ -42,7 +42,9 @@ export function ComparePage(el, params) {
         const tagsB = new Set(mb?.tags || []);
         const col = (m, other) => !m ? html`<div class="cmp__col cmp__col--empty"><button class="btn btn--accent" id="pick2">${icon('plus')} Выбрать второй микс</button></div>` : html`
           <div class="cmp__col">
+            <a class="cmp__cover" href="${href(m)}" tabindex="-1" aria-hidden="true">${cover(m)}</a>
             <a class="cmp__title" href="${href(m)}">${m.name}</a>
+            ${m.description ? html`<p class="cmp__desc">${m.description}</p>` : ''}
             <div class="cmp__score">${hasRating(m) ? html`${icon('flame')}<b>${fmtScore(m.avg_score)}</b><small>${votesText(m.votes)}</small>` : html`<small>Мало оценок</small>`}</div>
             <div class="card__tags">${(m.tags || []).map((t) => html`<span class="tag ${other && (other.tags || []).includes(t) ? 'tag--common' : ''}">${t}</span>`)}</div>
             <div class="stack">${(m.ingredients || []).map((x, i) => html`<i style="flex:${x.percent};background:${COLORS[i % 6]}"></i>`)}</div>

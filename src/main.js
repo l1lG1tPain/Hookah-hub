@@ -20,6 +20,7 @@ import { CreatePage } from './pages/create.js';
 import { AuthorPage } from './pages/author.js';
 import { ComparePage } from './pages/compare.js';
 import { VenuePage } from './pages/venue.js';
+import { RatingsPage } from './pages/ratings.js';
 
 const routes = {
     '/': HomePage,
@@ -30,6 +31,7 @@ const routes = {
     '/author': AuthorPage,
     '/compare': ComparePage,
     '/venue': VenuePage,
+    '/ratings': RatingsPage,
     '/mix': (el, p) => DetailPage(el, 'mix', p.get('id')),
     '/tobacco': (el, p) => DetailPage(el, 'tobacco', p.get('id')),
 };

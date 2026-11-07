@@ -1,6 +1,7 @@
 import qrcode from 'qrcode-generator';
-import { html, raw, icon, brandIcon, setHTML, toast, sheet, SCORES, toNode, avatar } from '../lib/ui.js';
-import { getItemsByIds, listMixes } from '../lib/api.js';
+import { html, raw, icon, brandIcon, setHTML, toast, sheet, toNode, avatar } from '../lib/ui.js';
+import { listMixes, myVenues, clearProfile } from '../lib/api.js';
+import { loadRatingRows } from './ratings.js';
 import {
     state, subscribe, signInWithGoogle, sendEmailCode, verifyEmailCode,
     telegramStart, telegramPoll, signOut, refreshUser,
@@ -10,7 +11,7 @@ import { profileShareSheet } from '../lib/profileShare.js';
 import { venuesBlock } from '../lib/venueManage.js';
 import { compressImage } from '../lib/photo.js';
 import { DEMO } from '../lib/supabase.js';
-import { rowItem, card } from '../components.js';
+import { card } from '../components.js';
 import { getTheme, setTheme } from '../theme.js';
 import { installCard, installMode, bindInstall } from '../lib/pwa.js';
 import { pushMode, pushState, enablePush, disablePush, setPrefs } from '../lib/push.js';
@@ -158,63 +159,68 @@ function user(el) {
 
     setHTML(el, html`<div class="profile">
       <section class="me panel">
-        ${DEMO ? avatar(u, 'avatar--xl') : html`<button class="avatar-edit" id="avatarBtn" aria-label="Сменить фото">${avatar(u, 'avatar--xl')}<span class="avatar-edit__badge">${icon('edit')}</span></button>`}
+        ${DEMO ? avatar(u, 'avatar--md') : html`<button class="avatar-edit" id="avatarBtn" aria-label="Сменить фото">${avatar(u, 'avatar--md')}<span class="avatar-edit__badge">${icon('edit')}</span></button>`}
         <div class="me__info">
           <div class="me__name"><h1>${u.name}</h1><button class="icon-btn" id="edit" aria-label="Изменить имя">${icon('edit')}</button></div>
-          ${u.handle ? html`<div class="me__handle">@${u.handle}</div>` : ''}
-          ${u.bio ? html`<div class="me__bio">${u.bio}</div>` : ''}
-          <div class="me__meta"><span class="mono">#${u.short}</span> · вход через ${PROVIDERS[u.provider] || u.provider || '—'}${u.email ? html` · ${u.email}` : ''}</div>
-          ${since ? html`<div class="me__meta">С нами с ${since}</div>` : ''}
+          ${u.handle ? html`<button class="me__handle" id="copyHandle" type="button" title="Скопировать ник">@${u.handle}</button>` : ''}
         </div>
         <div class="stats">
-          <a class="stat" href="#/author?id=${u.id}"><b>${u.mixes ?? 0}</b><span>миксов</span></a>
+          <a class="stat" href="#/author?id=${u.id}&pub=1"><b>${u.mixes ?? 0}</b><span>миксов</span></a>
           <a class="stat" href="#/favorites"><b>${u.favorites ?? 0}</b><span>в избранном</span></a>
-          <div class="stat"><b>${u.ratings ?? 0}</b><span>оценок</span></div>
+          <a class="stat" href="#/ratings"><b>${u.ratings ?? 0}</b><span>оценок</span></a>
         </div>
+      </section>
+
+      <section class="tiles">
+        ${u.handle ? html`<a class="tile" href="#/author?h=${u.handle}&pub=1"><b>Моя страница</b><span>@${u.handle}</span></a>` : ''}
+        <div class="tiles__venues" id="venuesBox"></div>
       </section>
 
       <section class="panel mypage">
-        <div class="mypage__txt"><b>Моя страница</b><span>${u.handle ? `hookahhub.netlify.app/u/${u.handle}` : 'Задайте ник — получите ссылку и QR для миксов'}</span></div>
+        <div class="mypage__txt"><b>Ссылка и QR</b><span>${u.handle ? `hookahhub.netlify.app/u/${u.handle}` : 'Задайте ник — получите ссылку и QR для миксов'}</span></div>
         <div class="mypage__btns">
           <button class="btn btn--sm" id="pageEdit">${icon('edit')} ${u.handle ? 'Изменить' : 'Задать ник'}</button>
-          <button class="btn btn--sm btn--accent" id="pageQr">${icon('qr')} QR</button>
+          ${u.handle ? html`<button class="btn btn--sm btn--accent" id="pageQr">${icon('qr')} QR</button>` : ''}
         </div>
       </section>
 
+      <section class="block" id="venuesManage"></section>
+
+      <a class="btn btn--accent btn--lg btn--block" href="#/create">${icon('plus')} Создать микс</a>
+
       ${installCard()}
 
-      <section class="block" id="venuesBox"></section>
-
       <section class="block">
-        <div class="block__head"><h2 class="h2">Мои миксы</h2><a class="btn btn--sm btn--accent" href="#/create">${icon('plus')} Создать</a></div>
+        <h2 class="h2">Мои миксы</h2>
         <div class="grid grid--compact" id="myMixes"></div>
       </section>
 
       <section class="block">
-        <h2 class="h2">Мои оценки</h2>
+        <div class="block__head"><h2 class="h2">Мои оценки</h2><a class="btn btn--sm" id="allRatings" href="#/ratings" hidden></a></div>
         <div class="rows" id="myRatings">${hadList ? raw(hadList) : html`<div class="row row--skel"><div class="skel"></div></div>`}</div>
       </section>
 
       <section class="panel settings" id="pushBox" hidden></section>
 
       <section class="panel settings">
-        <div class="setting">
+        <div class="setting setting--theme">
           <span>Тема</span>
-          <div class="seg seg--sm" id="theme">
+          <div class="seg seg--sm seg--full" id="theme">
             ${[['dark', 'Тёмная', 'moon'], ['light', 'Светлая', 'sun'], ['auto', 'Авто', 'auto']].map(([k, l, i]) =>
-                html`<button data-theme="${k}" aria-selected="${theme === k}">${icon(i)} ${l}</button>`)}
+                html`<button data-theme="${k}" aria-selected="${theme === k}">${icon(i)} <span>${l}</span></button>`)}
           </div>
         </div>
-        <button class="setting setting--btn danger" id="logout">${icon('logout')} Выйти из аккаунта</button>
       </section>
+      <button class="btn btn--danger btn--block" id="logout">${icon('logout')} Выйти из аккаунта</button>
       <p class="foot muted small">Hookah Hub · сделано с 🦈 для любителей кальяна<br><a href="/privacy.html" target="_blank">Конфиденциальность</a> · <a href="/terms.html" target="_blank">Условия</a></p>
     </div>`);
 
     const $ = (s) => el.querySelector(s);
     $('#edit').onclick = () => editName(u.name);
     $('#pageEdit').onclick = () => editPage(u);
-    $('#pageQr').onclick = () => profileShareSheet(u);
+    $('#pageQr')?.addEventListener('click', () => profileShareSheet(u));
     $('#avatarBtn')?.addEventListener('click', () => editAvatar(u));
+    $('#copyHandle')?.addEventListener('click', () => copyText('@' + u.handle));
     $('#logout').onclick = async () => { await signOut(); toast('Вы вышли из аккаунта'); };
     $('#theme').onclick = (e) => {
         const b = e.target.closest('[data-theme]'); if (!b) return;
@@ -222,9 +228,32 @@ function user(el) {
         $('#theme').querySelectorAll('button').forEach((x) => x.setAttribute('aria-selected', x === b));
     };
     pushBlock($('#pushBox'));
-    venuesBlock($('#venuesBox'));
-    loadMyRatings($('#myRatings'));
+    venueTiles($('#venuesBox'));
+    venuesBlock($('#venuesManage'));
+    loadMyRatings($('#myRatings'), $('#allRatings'));
     loadMyMixes($('#myMixes'), u.id);
+}
+
+async function copyText(text) {
+    try {
+        if (navigator.clipboard && window.isSecureContext) await navigator.clipboard.writeText(text);
+        else {
+            const t = Object.assign(document.createElement('textarea'), { value: text });
+            t.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
+            document.body.appendChild(t); t.select();
+            const ok = document.execCommand('copy'); t.remove();
+            if (!ok) throw new Error('copy');
+        }
+        toast('Ник скопирован');
+    } catch { toast('Не удалось скопировать', 'err'); }
+}
+
+async function venueTiles(box) {
+    // Плитка-ссылка для быстрого входа + полный блок управления (название, ссылка, команда, QR)
+    try {
+        const list = await myVenues();
+        if (list.length === 1) setHTML(box, html`<a class="tile" href="#/venue?s=${list[0].slug}"><b>Мои заведения</b><span>${list[0].name}</span></a>`);
+    } catch { /* блок управления ниже всё равно покажется */ }
 }
 
 async function loadMyMixes(box, id) {
@@ -238,25 +267,9 @@ async function loadMyMixes(box, id) {
     }
 }
 
-async function loadMyRatings(box) {
-    const entries = [...state.ratings.entries()].map(([k, score]) => { const i = k.indexOf(':'); return { type: k.slice(0, i), id: k.slice(i + 1), score }; });
-    if (!entries.length) {
-        setHTML(box, html`<div class="empty"><b>Вы ещё ничего не оценили</b><span>Откройте любой микс и поставьте оценку</span><a class="btn" href="#/">В каталог</a></div>`);
-        return;
-    }
-    try {
-        const [mixes, tobs] = await Promise.all([
-            getItemsByIds('mix', entries.filter((e) => e.type === 'mix').map((e) => e.id)),
-            getItemsByIds('tobacco', entries.filter((e) => e.type === 'tobacco').map((e) => e.id)),
-        ]);
-        const all = [...mixes, ...tobs].map((x) => ({ x, s: state.ratings.get(`${x.type}:${x.id}`) })).sort((a, b) => b.s - a.s);
-        setHTML(box, all.map(({ x, s }) => {
-            const sc = SCORES.find((q) => q.n === s);
-            return rowItem(x, { right: html`<span class="mine" title="Ваша оценка">${sc?.emoji}<small>${sc?.label}</small></span>` });
-        }));
-    } catch {
-        setHTML(box, html`<div class="empty"><b>Не удалось загрузить</b></div>`);
-    }
+async function loadMyRatings(box, linkEl) {
+    const total = await loadRatingRows(box, 5);
+    if (linkEl && total > 5) { linkEl.textContent = `Все (${total})`; linkEl.hidden = false; }
 }
 
 function editAvatar(u) {
@@ -288,7 +301,15 @@ function editPage(u) {
         <label class="field"><span class="muted small">О себе (до 160 символов)</span>
           <textarea class="input" id="bio" rows="3" maxlength="160" placeholder="Люблю фруктовые миксы с холодком">${u.bio || ''}</textarea></label>
         <button class="btn btn--accent btn--lg" type="submit">Сохранить</button>
+        ${u.handle ? html`<button class="btn btn--danger" id="pgDel" type="button">Удалить страницу</button>` : ''}
       </form>`);
+    s.body.querySelector('#pgDel')?.addEventListener('click', async () => {
+        if (!confirm(`Удалить страницу?
+
+Ник @${u.handle} освободится, и его может занять другой. Вернуть нельзя. Ссылка /u/${u.handle} и QR перестанут работать.`)) return;
+        try { await clearProfile(); await refreshUser(); s.close(); toast('Страница удалена'); }
+        catch (err) { toast(err.message || 'Не удалось удалить', 'err'); }
+    });
     const hd = s.body.querySelector('#hd');
     hd.addEventListener('input', () => { hd.value = hd.value.toLowerCase().replace(/[^a-z0-9_]/g, ''); });
     s.body.querySelector('form').onsubmit = async (e) => {

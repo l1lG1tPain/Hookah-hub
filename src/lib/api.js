@@ -3,6 +3,7 @@
 import { supabase, DEMO } from './supabase.js';
 import { demoMixes, demoTobaccos } from './demo.js';
 import { sortTop } from './rating.js';
+import { normVenueLinks } from './links.js';
 
 /* ---------------- нормализация ---------------- */
 const SCORE_KEYS = { 5: 'excellent', 4: 'good', 3: 'ok', 2: 'bad', 1: 'notgood' };
@@ -198,6 +199,11 @@ export async function setProfile(handle, bio) {
     return rpc('hh_set_profile', { p_handle: handle, p_bio: bio });
 }
 
+export async function clearProfile() {
+    if (DEMO) { demoLS.set('user', { ...demoLS.get('user', {}), handle: null, bio: null }); return; }
+    return rpc('hh_clear_profile');
+}
+
 export async function getAuthorByHandle(handle) {
     if (DEMO) {
         const u = demoLS.get('user', null);
@@ -379,22 +385,30 @@ export async function myVenues() {
     return (await rpc('hh_my_venues')) || [];
 }
 
-export async function createVenue({ slug, name, city, description }) {
+export async function createVenue({ slug, name, city, description, ...links }) {
+    const l = normVenueLinks(links);
     if (DEMO) {
         const list = demoVenues(), s = slug.toLowerCase();
         if (list.some((v) => v.slug === s)) throw new Error('Этот адрес уже занят');
-        const v = { id: crypto.randomUUID(), slug: s, name, city: city || null, description: description || null, logo_url: null, verified: false, menu: [] };
+        const v = { id: crypto.randomUUID(), slug: s, name, city: city || null, description: description || null, logo_url: null, verified: false, menu: [], ...l };
         saveDemoVenues([...list, v]); return v;
     }
-    return rpc('hh_venue_create', { p_slug: slug, p_name: name, p_city: city || null, p_description: description || null });
+    return rpc('hh_venue_create', {
+        p_slug: slug, p_name: name, p_city: city || null, p_description: description || null,
+        p_instagram: l.instagram, p_website: l.website, p_facebook: l.facebook, p_telegram: l.telegram, p_address: l.address,
+    });
 }
 
-export async function updateVenue(id, { slug, name, city, description }) {
+export async function updateVenue(id, { slug, name, city, description, ...links }) {
+    const l = normVenueLinks(links);
     if (DEMO) {
-        saveDemoVenues(demoVenues().map((v) => (v.id === id ? { ...v, slug: slug.toLowerCase(), name, city: city || null, description: description || null } : v)));
+        saveDemoVenues(demoVenues().map((v) => (v.id === id ? { ...v, slug: slug.toLowerCase(), name, city: city || null, description: description || null, ...l } : v)));
         return;
     }
-    return rpc('hh_venue_update', { p_id: id, p_slug: slug, p_name: name, p_city: city || null, p_description: description || null });
+    return rpc('hh_venue_update', {
+        p_id: id, p_slug: slug, p_name: name, p_city: city || null, p_description: description || null,
+        p_instagram: l.instagram, p_website: l.website, p_facebook: l.facebook, p_telegram: l.telegram, p_address: l.address,
+    });
 }
 
 export async function archiveVenue(id) {
@@ -405,7 +419,9 @@ export async function archiveVenue(id) {
 /** Меню: add/remove/reorder/note. В демо — localStorage. */
 export async function venueAddMix(venueId, mixId, note = '') {
     if (DEMO) {
-        saveDemoVenues(demoVenues().map((v) => (v.id === venueId && !v.menu.some((e) => e.id === mixId) ? { ...v, menu: [...v.menu, { id: mixId, note }] } : v)));
+        const cur = demoVenues().find((v) => v.id === venueId);
+        if (cur?.menu.some((e) => e.id === mixId)) throw new Error('Уже в меню');
+        saveDemoVenues(demoVenues().map((v) => (v.id === venueId ? { ...v, menu: [...v.menu, { id: mixId, note }] } : v)));
         return;
     }
     return rpc('hh_venue_add_mix', { p_venue: venueId, p_mix: mixId, p_note: note || null });
@@ -447,7 +463,12 @@ export async function venueRemoveStaff(venueId, userId) {
 
 /** Логотип заведения: загрузка в user-images/<uid>/… и привязка */
 export async function uploadVenueLogo(venueId, { blob, type: mime, ext }) {
-    if (DEMO) demoOff();
+    if (DEMO) {
+        // В демо нет Storage: логотип хранится data-URL в localStorage (сжатый, ≤200 КБ)
+        const url = await new Promise((ok, fail) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = fail; r.readAsDataURL(blob); });
+        saveDemoVenues(demoVenues().map((v) => (v.id === venueId ? { ...v, logo_url: url } : v)));
+        return url;
+    }
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error('Войдите, чтобы загружать фото');
     const path = `${session.user.id}/${crypto.randomUUID()}.${ext}`;
