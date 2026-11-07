@@ -205,7 +205,7 @@ supabase/
 | `login_states` | `state text PK`, `status ('new','ok','consumed','expired')`, `user_id`, `tg_id`, `created_at` | вход через Telegram; TTL 10 мин |
 | `push_subscriptions` | `user_id`, `endpoint` unique, `p256dh`, `auth`, `notify_ratings/daily/news`, `last_rating_check`, `user_agent` | RLS без политик; доступ через `hh_push_*` и service role в функциях |
 | `venues` | `id`, `slug` (уникальный по lower), `name`, `logo_url`, `description`, `city`, `owner_id → users`, `verified`, `verified_at`, `archived_at`, `created_at`, `updated_at` | заведения (миграция `20261111_venues.sql`); RLS без политик; удаление мягкое (`archived_at`). `verified` ставит админ в SQL Editor: `update public.venues set verified = true, verified_at = now() where lower(slug) = '…'` |
-| `venue_members` | PK (`venue_id`, `user_id`), `role owner/staff`, `added_by`, `removed_at` | команда; сейчас пишется только `staff` (UI для staff нет, RPC есть) |
+| `venue_members` | PK (`venue_id`, `user_id`), `role owner/staff`, `added_by`, `removed_at` | команда; сейчас пишется только `staff` (управление — шторка «Команда» в профиле, только owner) |
 | `venue_mixes` | PK (`venue_id`, `mix_id`), `pos`, `note`, `added_by`, `removed_at` | меню; `mix_id` с `on delete cascade` (иначе `hh_delete_mix` падает) |
 | `sessions` | устаревшая (старые токены x-session) | не используется, закрыта RLS |
 
@@ -259,6 +259,7 @@ supabase/
 | `hh_venue_archive(id, archived)` | owner | мягкое удаление |
 | `hh_venue_add_mix / remove_mix / reorder / set_note` | owner/staff | меню до 100 миксов, заметка ≤140; remove = `removed_at` |
 | `hh_venue_add_staff(venue, handle)` / `hh_venue_remove_staff(venue, user)` | owner | до 10 сотрудников |
+| `hh_venue_staff(venue)` | owner | список активных staff: user_id, name, handle, avatar_url, added_at (volatile — hh_uid пишет last_seen_at) |
 | `hh_my_venues()` | authenticated | заведения, где я owner или staff, с `role` и числом миксов |
 | `hh_venue_by_slug(slug)` | anon | публичная страница: поля заведения + `mixes[]` со статистикой оценок (без `owner_id`) |
 | `hh_venue_role`, `hh_venue_check` | внутр. | execute отозван у всех ролей |

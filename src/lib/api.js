@@ -422,6 +422,29 @@ export async function venueReorder(venueId, ids) {
     return rpc('hh_venue_reorder', { p_venue: venueId, p_mix_ids: ids });
 }
 
+/** Команда заведения (только owner). В демо — localStorage. */
+export async function venueStaff(venueId) {
+    if (DEMO) return demoVenues().find((v) => v.id === venueId)?.staff || [];
+    return (await rpc('hh_venue_staff', { p_venue: venueId })) || [];
+}
+export async function venueAddStaff(venueId, handle) {
+    const h = String(handle || '').trim().replace(/^@/, '');
+    if (DEMO) {
+        if (!h) throw new Error('Пользователь не найден');
+        const vs = demoVenues(); const v = vs.find((x) => x.id === venueId);
+        const staff = v?.staff || [];
+        if (staff.some((s) => s.handle === h.toLowerCase())) return;
+        if (staff.length >= 10) throw new Error('Не больше 10 сотрудников');
+        saveDemoVenues(vs.map((x) => (x.id === venueId ? { ...x, staff: [...staff, { user_id: `demo-${h}`, name: h, handle: h.toLowerCase(), avatar_url: null, added_at: new Date().toISOString() }] } : x)));
+        return;
+    }
+    return rpc('hh_venue_add_staff', { p_venue: venueId, p_handle: h });
+}
+export async function venueRemoveStaff(venueId, userId) {
+    if (DEMO) { saveDemoVenues(demoVenues().map((v) => (v.id === venueId ? { ...v, staff: (v.staff || []).filter((s) => s.user_id !== userId) } : v))); return; }
+    return rpc('hh_venue_remove_staff', { p_venue: venueId, p_user: userId });
+}
+
 /** Логотип заведения: загрузка в user-images/<uid>/… и привязка */
 export async function uploadVenueLogo(venueId, { blob, type: mime, ext }) {
     if (DEMO) demoOff();

@@ -778,7 +778,7 @@ body:has(.sheet.open) .toasts { top: calc(16px + env(safe-area-inset-top)); bott
 .mypage { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .mypage__txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .mypage__txt span { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
-.mypage__btns { display: flex; gap: 8px; }
+.mypage__btns { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 textarea.input { resize: vertical; min-height: 76px; font: inherit; }
 .pshare { display: flex; flex-direction: column; gap: 14px; align-items: stretch; }

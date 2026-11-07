@@ -3,6 +3,7 @@ import { html, icon, setHTML, toast, sheet } from './ui.js';
 import {
     myVenues, getVenue, createVenue, updateVenue, archiveVenue,
     venueAddMix, venueRemoveMix, venueReorder, uploadVenueLogo, listMixes,
+    venueStaff, venueAddStaff, venueRemoveStaff,
 } from './api.js';
 import { compressImage } from './photo.js';
 import { venueShareSheet } from './venueShare.js';
@@ -21,13 +22,15 @@ export async function venuesBlock(box) {
               <div class="mypage__btns">
                 <button class="btn btn--sm" data-menu="${v.id}">Меню</button>
                 <button class="btn btn--sm btn--accent" data-qr="${v.id}">${icon('qr')}</button>
-                ${v.role === 'owner' ? html`<button class="btn btn--sm btn--ghost" data-edit="${v.id}">${icon('edit')}</button>` : ''}
+                ${v.role === 'owner' ? html`<button class="btn btn--sm" data-team="${v.id}">Команда</button>
+                <button class="btn btn--sm btn--ghost" data-edit="${v.id}">${icon('edit')}</button>` : ''}
               </div></div>`)}</div>`
             : html`<p class="muted small">Своё меню миксов и QR на стол для гостей. Создайте заведение — адрес /v/название.</p>`}`);
         const by = (id) => list.find((v) => v.id === id);
         box.querySelector('#vNew').onclick = () => venueForm(null, paint);
         box.querySelectorAll('[data-menu]').forEach((b) => { b.onclick = () => menuEditor(by(b.dataset.menu), paint); });
         box.querySelectorAll('[data-qr]').forEach((b) => { b.onclick = () => venueShareSheet(by(b.dataset.qr)); });
+        box.querySelectorAll('[data-team]').forEach((b) => { b.onclick = () => teamSheet(by(b.dataset.team)); });
         box.querySelectorAll('[data-edit]').forEach((b) => { b.onclick = () => venueForm(by(b.dataset.edit), paint); });
     };
     paint();
@@ -70,6 +73,40 @@ function venueForm(v, done) {
         try { await archiveVenue(v.id); s.close(); toast('Заведение убрано'); done(); }
         catch (err) { toast(err.message || 'Не удалось', 'err'); }
     });
+}
+
+async function teamSheet(v) {
+    const s = sheet(html`<form class="nameform">
+        <h2 class="h2">Команда · ${v.name}</h2>
+        <div class="rows" id="tmList"><div class="row row--skel"><div class="skel"></div></div></div>
+        <label class="field"><span class="muted small">Добавить по @нику (до 10 сотрудников)</span>
+          <input class="input" id="tmh" placeholder="@ник" maxlength="40" autocapitalize="none" autocomplete="off" spellcheck="false"></label>
+        <button class="btn btn--accent btn--lg" type="submit">Добавить</button>
+      </form>`);
+    const $ = (q) => s.body.querySelector(q);
+    const paintList = (list) => {
+        setHTML($('#tmList'), list.length ? list.map((m) => html`<div class="row">
+            <div class="row__main"><div class="row__title">${m.name || 'Без имени'}</div>
+              <div class="row__sub">${m.handle ? '@' + m.handle : ''}</div></div>
+            <button class="btn btn--sm btn--ghost btn--danger" type="button" data-rm="${m.user_id}">убрать</button></div>`)
+            : html`<p class="muted small">Сотрудников пока нет. Сотрудник правит меню и логотип, но не заведение и команду.</p>`);
+        s.body.querySelectorAll('[data-rm]').forEach((b) => {
+            b.onclick = async () => {
+                if (!confirm('Убрать сотрудника? Заведение пропадёт у него.')) return;
+                try { await venueRemoveStaff(v.id, b.dataset.rm); await reload(); toast('Сотрудник убран'); }
+                catch (e) { toast(e.message || 'Не удалось', 'err'); }
+            };
+        });
+    };
+    const reload = async () => paintList(await venueStaff(v.id));
+    $('form').onsubmit = async (e) => {
+        e.preventDefault();
+        const h = $('#tmh').value.trim();
+        if (!h) return;
+        try { await venueAddStaff(v.id, h); $('#tmh').value = ''; await reload(); toast('Сотрудник добавлен'); }
+        catch (err) { toast(err.message || 'Не удалось добавить', 'err'); }
+    };
+    try { await reload(); } catch { setHTML($('#tmList'), html`<div class="empty"><b>Не удалось загрузить</b></div>`); }
 }
 
 async function menuEditor(v, done) {
