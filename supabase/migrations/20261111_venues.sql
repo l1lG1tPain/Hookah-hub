@@ -260,7 +260,7 @@ end $$;
 -- Чтение: мои заведения (owner/staff), публичная страница, каталог
 -- ---------------------------------------------------------------------------
 create or replace function public.hh_my_venues()
-returns json language plpgsql stable security definer set search_path = public as $$
+returns json language plpgsql security definer set search_path = public as $$
 declare v_uid uuid;
 begin
   v_uid := public.hh_uid();
