@@ -193,6 +193,21 @@ export async function updateName(name) {
     return rpc('hh_update_name', { p_name: name });
 }
 
+export async function setProfile(handle, bio) {
+    if (DEMO) { demoLS.set('user', { ...demoLS.get('user', {}), handle: handle || null, bio: bio || null }); return; }
+    return rpc('hh_set_profile', { p_handle: handle, p_bio: bio });
+}
+
+export async function getAuthorByHandle(handle) {
+    if (DEMO) {
+        const u = demoLS.get('user', null);
+        return u && u.handle && u.handle.toLowerCase() === String(handle).toLowerCase() ? getAuthor(u.id).then((a) => ({ ...a, handle: u.handle, bio: u.bio })) : null;
+    }
+    const { data, error } = await supabase.rpc('hh_author_by_handle', { p_handle: handle });
+    if (error) throw error;
+    return data;
+}
+
 export async function myFavorites() {
     if (DEMO) return demoLS.get('favs', []);
     return (await rpc('hh_my_favorites')) || [];
@@ -254,7 +269,7 @@ export async function mixesWithTobacco(name, brand) {
 export async function getAuthor(id) {
     if (DEMO) {
         const u = demoLS.get('user', null);
-        if (u && u.id === id) return { id, name: u.name, avatar_url: null, created_at: u.created_at, mixes: demoUserMixes().length };
+        if (u && u.id === id) return { id, name: u.name, handle: u.handle || null, bio: u.bio || null, avatar_url: null, created_at: u.created_at, mixes: demoUserMixes().length };
         return { id, name: 'Hookah Hub', avatar_url: null, created_at: null, mixes: demoMixes.length };
     }
     const { data, error } = await supabase.rpc('hh_author', { p_id: id });

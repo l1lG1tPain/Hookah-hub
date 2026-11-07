@@ -5,7 +5,8 @@ import {
     state, subscribe, signInWithGoogle, sendEmailCode, verifyEmailCode,
     telegramStart, telegramPoll, signOut, refreshUser,
 } from '../lib/store.js';
-import { updateName, attachImage, clearAvatar } from '../lib/api.js';
+import { updateName, setProfile, attachImage, clearAvatar } from '../lib/api.js';
+import { profileShareSheet } from '../lib/profileShare.js';
 import { compressImage } from '../lib/photo.js';
 import { DEMO } from '../lib/supabase.js';
 import { rowItem, card } from '../components.js';
@@ -159,6 +160,8 @@ function user(el) {
         ${DEMO ? avatar(u, 'avatar--xl') : html`<button class="avatar-edit" id="avatarBtn" aria-label="Сменить фото">${avatar(u, 'avatar--xl')}<span class="avatar-edit__badge">${icon('edit')}</span></button>`}
         <div class="me__info">
           <div class="me__name"><h1>${u.name}</h1><button class="icon-btn" id="edit" aria-label="Изменить имя">${icon('edit')}</button></div>
+          ${u.handle ? html`<div class="me__handle">@${u.handle}</div>` : ''}
+          ${u.bio ? html`<div class="me__bio">${u.bio}</div>` : ''}
           <div class="me__meta"><span class="mono">#${u.short}</span> · вход через ${PROVIDERS[u.provider] || u.provider || '—'}${u.email ? html` · ${u.email}` : ''}</div>
           ${since ? html`<div class="me__meta">С нами с ${since}</div>` : ''}
         </div>
@@ -166,6 +169,14 @@ function user(el) {
           <a class="stat" href="#/author?id=${u.id}"><b>${u.mixes ?? 0}</b><span>миксов</span></a>
           <a class="stat" href="#/favorites"><b>${u.favorites ?? 0}</b><span>в избранном</span></a>
           <div class="stat"><b>${u.ratings ?? 0}</b><span>оценок</span></div>
+        </div>
+      </section>
+
+      <section class="panel mypage">
+        <div class="mypage__txt"><b>Моя страница</b><span>${u.handle ? `hookahhub.netlify.app/u/${u.handle}` : 'Задайте ник — получите ссылку и QR для миксов'}</span></div>
+        <div class="mypage__btns">
+          <button class="btn btn--sm" id="pageEdit">${icon('edit')} ${u.handle ? 'Изменить' : 'Задать ник'}</button>
+          <button class="btn btn--sm btn--accent" id="pageQr">${icon('qr')} QR</button>
         </div>
       </section>
 
@@ -198,6 +209,8 @@ function user(el) {
 
     const $ = (s) => el.querySelector(s);
     $('#edit').onclick = () => editName(u.name);
+    $('#pageEdit').onclick = () => editPage(u);
+    $('#pageQr').onclick = () => profileShareSheet(u);
     $('#avatarBtn')?.addEventListener('click', () => editAvatar(u));
     $('#logout').onclick = async () => { await signOut(); toast('Вы вышли из аккаунта'); };
     $('#theme').onclick = (e) => {
@@ -261,6 +274,26 @@ function editAvatar(u) {
         try { await clearAvatar(); await refreshUser(); s.close(); toast('Фото убрано'); }
         catch { toast('Не удалось убрать фото', 'err'); }
     });
+}
+
+function editPage(u) {
+    const s = sheet(html`<form class="nameform">
+        <h2 class="h2">Моя страница</h2>
+        <label class="field"><span class="muted small">Ник — для ссылки /u/ник (латиница, цифры, _; 3–20)</span>
+          <input class="input" id="hd" value="${u.handle || ''}" maxlength="20" autocapitalize="none" autocomplete="off" spellcheck="false" placeholder="например, smoke_master"></label>
+        <label class="field"><span class="muted small">О себе (до 160 символов)</span>
+          <textarea class="input" id="bio" rows="3" maxlength="160" placeholder="Люблю фруктовые миксы с холодком">${u.bio || ''}</textarea></label>
+        <button class="btn btn--accent btn--lg" type="submit">Сохранить</button>
+      </form>`);
+    const hd = s.body.querySelector('#hd');
+    hd.addEventListener('input', () => { hd.value = hd.value.toLowerCase().replace(/[^a-z0-9_]/g, ''); });
+    s.body.querySelector('form').onsubmit = async (e) => {
+        e.preventDefault();
+        const handle = hd.value.trim();
+        if (handle && handle.length < 3) return toast('Ник — минимум 3 символа');
+        try { await setProfile(handle, s.body.querySelector('#bio').value.trim()); await refreshUser(); s.close(); toast('Страница обновлена'); }
+        catch (err) { toast(err.message || 'Не удалось сохранить', 'err'); }
+    };
 }
 
 function editName(current) {

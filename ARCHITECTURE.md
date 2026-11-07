@@ -6,7 +6,7 @@
 > и синхронизируйте его копию в claude.ai Project «Hookah hub» (doc `claude/ARCHITECTURE.md`).
 > Порядок обновления — в разделе [«Как поддерживать этот файл»](#как-поддерживать-этот-файл).
 
-_Последнее обновление: 2026-11-07 (ключ перевыпущен, пуши настроены; ранее: пуши, загрузка фото, свои табаки и бренды, новый подсчёт оценок, ссылки /m/ и /t/ с превью, «Забить», сравнение, подборки; ранее: Google-вход, PWA-установка, лоадер)._
+_Последнее обновление: 2026-11-07 (личная страница `/u/<ник>` и стильный QR; ранее: ключ перевыпущен, пуши настроены; ранее: пуши, загрузка фото, свои табаки и бренды, новый подсчёт оценок, ссылки /m/ и /t/ с превью, «Забить», сравнение, подборки; ранее: Google-вход, PWA-установка, лоадер)._
 
 ---
 
@@ -105,7 +105,9 @@ src/
     pwa.js                 установка PWA: beforeinstallprompt, iOS-инструкция, installCard/bindInstall,
                            dismiss в localStorage 'hh-pwa-dismiss' (7 дней)
     phrases.js             LOADING (15 фраз лоадера) и makeGreeting() — приветствия по времени суток, {n} = имя
-    sharecard.js           makeShareCard(): PNG 1080×1350 через canvas (подгружается лениво)
+    sharecard.js           makeShareCard(): PNG 1080×1440 через canvas (подгружается лениво), makeProfileCard() — визитка автора
+    qr.js                  drawQr()/makeQrCanvas(): стильный QR (круглые точки, глаза цвета углей, логотип, ECC H)
+    profileShare.js        шторка «QR и ссылка» личной страницы (превью визитки, поделиться, скачать)
     rating.js              MIN_VOTES=3, hasRating, rankItems/sortTop: взвешенный рейтинг (см. «Оценки»)
     photo.js               compressImage (canvas → WebP/JPEG ≤1024px, ≤200 КБ), photoField/bindPhoto
     tobaccoForm.js         openTobaccoSheet(): бренд + табак + фото; createBrand → createTobacco → attachImage
@@ -124,11 +126,11 @@ src/
     profile.js             «/profile»: вход (гость) или профиль: статистика, мои миксы, мои оценки, тема, выход
     create.js              «/create»: конструктор микса + шторка выбора табака
     compare.js             «/compare?a=&b=»: два микса рядом; pickMix() — шторка выбора
-    author.js              «/author?id=»: публичная страница автора и его миксы
+    author.js              «/author?id=» или «?h=<ник>»: публичная страница автора, его миксы, кнопка «QR и ссылка»
   styles/app.css           ВСЯ стилизация (дизайн-токены, компоненты, адаптив)
 
 netlify/functions/
-  share.js                 /m/<id>, /t/<id> (редиректы в netlify.toml): HTML с Open Graph для превью в мессенджерах
+  share.js                 /m/<id>, /t/<id>, /u/<ник> (редиректы в netlify.toml): HTML с Open Graph для превью в мессенджерах
                            + мгновенный переход на `/#/mix?id=…` / `/#/tobacco?id=…`; данные берёт REST-запросом с anon-ключом
   push-ratings.js          расписание */15 мин: авторам «ваш микс оценили»
   push-daily.js            расписание 0 14 * * * (19:00 Ташкент): «Микс дня»
@@ -172,7 +174,7 @@ supabase/
 | `#/favorites` | FavoritesPage | гость видит призыв войти |
 | `#/profile` | ProfilePage | гость → экран входа |
 | `#/create` | CreatePage | гость → призыв войти |
-| `#/author?id=<users.id>` | AuthorPage | все |
+| `#/author?id=<users.id>` или `#/author?h=<ник>` | AuthorPage | все (публичная ссылка `/u/<ник>` → share.js → `?h=`) |
 | `#/compare?a=<mix>&b=<mix>` | ComparePage | все |
 | `#/mix?id=<uuid>` | DetailPage('mix') | все; оценка требует входа |
 | `#/tobacco?id=<uuid>` | DetailPage('tobacco') | все |
@@ -190,7 +192,7 @@ supabase/
 
 | Таблица | Ключевые колонки | Примечание |
 |---|---|---|
-| `users` | `id uuid PK`, `tg_id bigint unique null`, `name text not null`, `avatar_url`, `auth_id uuid unique → auth.users`, `email`, `provider`, `name_changed`, `created_at`, `last_seen_at` | профиль; RLS вкл., политик нет |
+| `users` | `id uuid PK`, `tg_id bigint unique null`, `name text not null`, `avatar_url`, `handle text` (уникальный по lower), `bio text`, `auth_id uuid unique → auth.users`, `email`, `provider`, `name_changed`, `created_at`, `last_seen_at` | профиль; RLS вкл., политик нет |
 | `brands` | `id uuid`, `name unique` | RLS + публичный SELECT. 17 брендов: `DarkSide`, `MustHave`, `Black Burn`, `BURN`, `Element`, `Tangiers`, `Fumari`, `Al Fakher`, `Serbetli`, `Adalya`, `Daily Hookah`, `Spectrum`, `Bonche`, `Satyr`, `Chabacco`, `Afzal`, `Nakhla`. Фронт берёт список брендов отсюда (`listBrands`) |
 | `lines` | `id`, `brand_id`, `name`, unique (brand_id,name) | 27 линеек: DarkSide Core/Base/Shake/Xperience/Sabotage/Shot, Element Water/Earth/Air, Tangiers Noir, Black Burn HiT, Serbetli Hard Line, Spectrum Classic/Hard Line/Mix/Kitchen, Daily Hookah Formula/Starline, Satyr Aroma/Brilliant/Old School, Chabacco Medium/Emotions/Mix, Nakhla Classic/Mizo. У DarkSide линейка проставлена всем 187 позициям (Core 78, Shot 33, Xperience 30, Sabotage 22, Shake 16, Base 8). Фронт показывает линейку на странице табака (в eyebrow «Табак · Бренд · Линейка»); фильтра по линейкам нет |
 | `tobaccos` | `id uuid`, `brand_id`, `line_id`, `name`, `taste_tags text[]`, `image_url`, `description text`, `created_at` | RLS + публичный SELECT. **unique (brand_id, name)**. 1291 позиция. Названия английские, как на банках (у Daily Hookah и DarkSide Shot — русские). У Element один вкус выходит в нескольких линейках, поэтому линейка входит в название: `Raspberry (Water)`, `Raspberry (Earth)`. `description` заполнен у всех: «Вкус: <ноты>. <характер линейки/бренда>»; у ~204 вкусов с неизвестным составом — «Авторский вкус бренда. …» |
@@ -235,7 +237,9 @@ supabase/
 | `hh_rate(type, id, 1..5)` | authenticated | upsert оценки микса или табака |
 | `hh_my_ratings()` | authenticated | `(item_type, item_id, score 1..5)` |
 | `hh_mix_distribution(mix_id)` | anon | `{excellent..notgood}` |
-| `hh_author(id)` | anon | `{id, name, avatar_url, created_at, mixes}` — только безопасные поля |
+| `hh_author(id)` | anon | `{id, name, handle, bio, avatar_url, created_at, mixes}` — только безопасные поля |
+| `hh_author_by_handle(handle)` | anon | то же по нику (для `/u/<ник>`) |
+| `hh_set_profile(handle, bio)` | auth | ник 3–20 `[a-z0-9_]`, зарезервированные слова запрещены, занят → ошибка; bio ≤160 |
 | `hh_authors(uuid[])` | anon | имена и аватары пачкой |
 | `hh_create_mix(title, description, tags[], ingredients jsonb)` | authenticated | проверки: название 2–60, 1–6 строк, сумма = 100, % > 0, табак существует, до 10 миксов в сутки. `ingredients: [{tobacco_id, percent} \| {custom_title, percent}]`. Публикует сразу |
 | `hh_delete_mix(id)` | authenticated | только свой микс; удаляет состав, оценки и избранное |

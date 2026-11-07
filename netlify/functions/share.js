@@ -1,7 +1,8 @@
-// /m/<id> и /t/<id>: страница-«визитка» для ссылок в мессенджерах (Open Graph) + мгновенный редирект в приложение.
-// Мессенджеры не исполняют JS, поэтому читают превью отсюда; человека скрипт сразу переводит на #/mix?id=… или #/tobacco?id=…
+// /m/<id>, /t/<id> и /u/<ник>: страница-«визитка» для ссылок в мессенджерах (Open Graph) + мгновенный редирект в приложение.
+// Мессенджеры не исполняют JS, поэтому читают превью отсюда; человека скрипт сразу переводит на #/mix?id=…, #/tobacco?id=… или #/author?h=…
 const SITE = process.env.SITE_URL || 'https://hookahhub.netlify.app';
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const HANDLE = /^[a-z0-9_]{3,20}$/i;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 async function rest(path) {
@@ -11,18 +12,37 @@ async function rest(path) {
     return r.json();
 }
 
+async function rpc(name, args) {
+    const key = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+    const r = await fetch(`${process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL}/rest/v1/rpc/${name}`, {
+        method: 'POST', headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, body: JSON.stringify(args),
+    });
+    return r.ok ? r.json() : null;
+}
+
 export const handler = async (event) => {
     // Netlify не всегда подставляет :id в query редиректа, поэтому берём тип и id из самого пути (/m/<id>, /t/<id>)
     const qs = event.queryStringParameters || {};
-    const pm = String(event.rawUrl || event.path || '').split('?')[0].match(/\/([mt])\/([^/?#]+)\/?$/);
-    const type = (pm ? pm[1] : qs.type) === 't' ? 'tobacco' : 'mix';
+    const pm = String(event.rawUrl || event.path || '').split('?')[0].match(/\/([mtu])\/([^/?#]+)\/?$/);
+    const code = pm ? pm[1] : qs.type;
+    const type = code === 'u' ? 'user' : code === 't' ? 'tobacco' : 'mix';
     let id = '';
     try { id = decodeURIComponent(pm ? pm[2] : String(qs.id || '')).trim(); } catch { id = ''; }
-    const target = `${SITE}/#/${type}?id=${encodeURIComponent(id)}`;
+    const target = type === 'user' ? `${SITE}/#/author?h=${encodeURIComponent(id)}` : `${SITE}/#/${type}?id=${encodeURIComponent(id)}`;
     let title = 'Hookah Hub', desc = 'Миксы, табаки и честный рейтинг от любителей кальяна.', image = `${SITE}/og.png`;
 
     try {
-        if (UUID.test(id)) {
+        if (type === 'user') {
+            if (HANDLE.test(id)) {
+                const a = await rpc('hh_author_by_handle', { p_handle: id });
+                if (a) {
+                    title = `${a.name} (@${a.handle}) — миксы на Hookah Hub`;
+                    const n = Number(a.mixes) || 0;
+                    desc = a.bio || (n ? `Авторские миксы: ${n}. Смотрите составы и оценки сообщества.` : desc);
+                    if (a.avatar_url) image = a.avatar_url;
+                }
+            }
+        } else if (UUID.test(id)) {
             if (type === 'mix') {
                 const [m] = await rest(`mixes_with_stats?id=eq.${id}&select=title,description,votes,avg_score,image_url`);
                 if (m) {
@@ -52,7 +72,7 @@ export const handler = async (event) => {
 <meta name="description" content="${esc(desc)}">
 <meta property="og:site_name" content="Hookah Hub"><meta property="og:type" content="website">
 <meta property="og:title" content="${esc(title)}"><meta property="og:description" content="${esc(desc)}">
-<meta property="og:image" content="${esc(image)}"><meta property="og:url" content="${SITE}/${type === 'mix' ? 'm' : 't'}/${esc(id)}">
+<meta property="og:image" content="${esc(image)}"><meta property="og:url" content="${SITE}/${type === 'user' ? 'u' : type === 'mix' ? 'm' : 't'}/${esc(id)}">
 <meta name="twitter:card" content="summary_large_image">
 <meta http-equiv="refresh" content="0;url=${esc(target)}">
 <script>location.replace(${JSON.stringify(target)})</script></head>

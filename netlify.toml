@@ -27,6 +27,12 @@
   to = "/.netlify/functions/share?type=t&id=:id"
   status = 200
 
+# Личная страница автора: /u/<ник>
+[[redirects]]
+  from = "/u/:handle"
+  to = "/.netlify/functions/share?type=u&id=:handle"
+  status = 200
+
 [[headers]]
   for = "/sw.js"
   [headers.values]

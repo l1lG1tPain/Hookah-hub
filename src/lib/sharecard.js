@@ -1,13 +1,13 @@
 /* Картинка-карточка для шаринга (canvas → PNG) */
 import { fmtScore } from './ui.js';
 import { hasRating } from './rating.js';
-import qrcode from 'qrcode-generator';
+import { drawQr } from './qr.js';
 
 const W = 1080, H = 1440;
 const css = (n, d) => getComputedStyle(document.documentElement).getPropertyValue(n).trim() || d;
 
 function loadImg(src) {
-    return new Promise((res) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
+    return new Promise((res) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => res(null); i.crossOrigin = 'anonymous'; i.src = src; });
 }
 function wrap(ctx, text, x, y, maxW, lh, maxLines) {
     const words = String(text).split(' '); let line = ''; const lines = [];
@@ -21,12 +21,7 @@ function wrap(ctx, text, x, y, maxW, lh, maxLines) {
 }
 function rr(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); }
 
-export async function makeShareCard(x, type, url) {
-    await document.fonts?.ready;
-    const c = Object.assign(document.createElement('canvas'), { width: W, height: H });
-    const ctx = c.getContext('2d');
-    const accent = css('--accent', '#ff7a3d'), accent2 = css('--accent-2', '#ffb547');
-
+async function paintBackdrop(ctx) {
     const bg = ctx.createLinearGradient(0, 0, 0, H);
     bg.addColorStop(0, '#2a1710'); bg.addColorStop(1, '#120d0a');
     ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H);
@@ -43,6 +38,74 @@ export async function makeShareCard(x, type, url) {
         oc.globalCompositeOperation = 'destination-in'; oc.fillStyle = g; oc.fillRect(0, 0, 230, 230);
         ctx.drawImage(o, W - 300, 50);
     }
+}
+
+const PNG = (c) => new Promise((r) => c.toBlob(r, 'image/png'));
+
+/* Подвал: QR (если есть url) + «Hookah Hub» */
+async function paintFooter(ctx, url, accent) {
+    const qrSize = 210, qy = H - 70 - qrSize;
+    let tx = 80;
+    if (url) {
+        drawQr(ctx, 80, qy, qrSize, url, await loadImg('/icons/192.png'));
+        tx = 80 + qrSize + 36;
+    }
+    ctx.textAlign = 'left'; ctx.fillStyle = '#fff6ee'; ctx.font = '800 48px "Unbounded Variable", sans-serif';
+    ctx.fillText('Hookah', tx, qy + 78);
+    ctx.fillStyle = accent; ctx.fillText('Hub', tx + ctx.measureText('Hookah ').width, qy + 78);
+    ctx.fillStyle = '#b9a595'; ctx.font = '600 30px "Manrope Variable", sans-serif';
+    ctx.fillText(url ? 'Наведите камеру, чтобы открыть' : 'hookahhub.netlify.app', tx, qy + 128);
+    ctx.fillText('hookahhub.netlify.app', tx, qy + 172);
+}
+
+/* Карточка личной страницы: аватар, имя, @ник, статистика и крупный QR */
+export async function makeProfileCard(a, url, stats = '') {
+    await document.fonts?.ready;
+    const c = Object.assign(document.createElement('canvas'), { width: W, height: H });
+    const ctx = c.getContext('2d');
+    const accent = css('--accent', '#ff7a3d'), accent2 = css('--accent-2', '#ffb547');
+    await paintBackdrop(ctx);
+    ctx.textBaseline = 'alphabetic';
+
+    const R = 90, cx = 80 + R, cy = 130 + R;
+    const img = a.avatar_url ? await loadImg(a.avatar_url) : null;
+    ctx.save(); ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2); ctx.clip();
+    if (img) ctx.drawImage(img, cx - R, cy - R, R * 2, R * 2);
+    else {
+        const g = ctx.createLinearGradient(0, cy - R, 0, cy + R); g.addColorStop(0, accent2); g.addColorStop(1, accent);
+        ctx.fillStyle = g; ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+        ctx.fillStyle = '#1d0f06'; ctx.font = '800 96px "Unbounded Variable", sans-serif'; ctx.textAlign = 'center';
+        ctx.fillText((a.name || '?').trim().slice(0, 1).toUpperCase(), cx, cy + 34); ctx.textAlign = 'left';
+    }
+    ctx.restore();
+    ctx.strokeStyle = accent; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(cx, cy, R + 6, 0, Math.PI * 2); ctx.stroke();
+
+    ctx.fillStyle = accent2; ctx.font = '700 34px "Manrope Variable", sans-serif';
+    ctx.fillText('АВТОР МИКСОВ', 80, 400);
+    ctx.fillStyle = '#fff6ee'; ctx.font = '800 76px "Unbounded Variable", sans-serif';
+    const n = wrap(ctx, a.name, 80, 490, W - 160, 90, 2);
+    let y = 490 + n * 90 - 20;
+    if (a.handle) { ctx.fillStyle = accent; ctx.font = '700 46px "Manrope Variable", sans-serif'; ctx.fillText('@' + a.handle, 80, y + 50); y += 60; }
+    if (stats) { ctx.fillStyle = '#b9a595'; ctx.font = '600 38px "Manrope Variable", sans-serif'; ctx.fillText(stats, 80, y + 50); }
+
+    const qs = 520, qx = (W - qs) / 2, qy = 760;
+    drawQr(ctx, qx, qy, qs, url, await loadImg('/icons/192.png'));
+    ctx.textAlign = 'center'; ctx.fillStyle = '#d8c7b8'; ctx.font = '600 34px "Manrope Variable", sans-serif';
+    ctx.fillText('Отсканируйте — все миксы автора', W / 2, qy + qs + 60);
+    ctx.fillStyle = '#fff6ee'; ctx.font = '800 44px "Unbounded Variable", sans-serif';
+    const w1 = ctx.measureText('Hookah ').width, w2 = ctx.measureText('Hub').width, bx = (W - w1 - w2) / 2;
+    ctx.textAlign = 'left'; ctx.fillText('Hookah', bx, H - 70);
+    ctx.fillStyle = accent; ctx.fillText('Hub', bx + w1, H - 70);
+    return PNG(c);
+}
+
+export async function makeShareCard(x, type, url) {
+    await document.fonts?.ready;
+    const c = Object.assign(document.createElement('canvas'), { width: W, height: H });
+    const ctx = c.getContext('2d');
+    const accent = css('--accent', '#ff7a3d'), accent2 = css('--accent-2', '#ffb547');
+
+    await paintBackdrop(ctx);
 
     ctx.textBaseline = 'alphabetic'; ctx.fillStyle = accent2;
     ctx.font = '700 34px "Manrope Variable", sans-serif';
@@ -85,22 +148,7 @@ export async function makeShareCard(x, type, url) {
     }
 
     // QR на страницу микса/табака + подпись
-    const qrSize = 190, qy = H - 70 - qrSize;
-    let tx = 80;
-    if (url) {
-        const qr = qrcode(0, 'M'); qr.addData(url); qr.make();
-        const n2 = qr.getModuleCount(), cell = Math.floor((qrSize - 24) / n2), side = cell * n2 + 24;
-        ctx.fillStyle = '#fff6ee'; rr(ctx, 80, qy, side, side, 22); ctx.fill();
-        ctx.fillStyle = '#1b120d';
-        for (let r = 0; r < n2; r++) for (let c2 = 0; c2 < n2; c2++) if (qr.isDark(r, c2)) ctx.fillRect(92 + c2 * cell, qy + 12 + r * cell, cell, cell);
-        tx = 80 + side + 36;
-    }
-    ctx.fillStyle = '#fff6ee'; ctx.font = '800 48px "Unbounded Variable", sans-serif';
-    ctx.fillText('Hookah', tx, qy + 70);
-    ctx.fillStyle = accent; ctx.fillText('Hub', tx + ctx.measureText('Hookah ').width, qy + 70);
-    ctx.fillStyle = '#b9a595'; ctx.font = '600 30px "Manrope Variable", sans-serif';
-    ctx.fillText(url ? 'Наведите камеру, чтобы открыть' : 'hookahhub.netlify.app', tx, qy + 120);
-    ctx.fillText('hookahhub.netlify.app', tx, qy + 164);
+    await paintFooter(ctx, url, accent);
 
-    return new Promise((r) => c.toBlob(r, 'image/png'));
+    return PNG(c);
 }

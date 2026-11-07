@@ -43,6 +43,7 @@ const P = {
     star: '<path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z"/>',
     copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
+    qr: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 14h3v3m4 0v4h-4m-3 0v-1"/>',
     trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
     sliders: '<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
 };
@@ -171,6 +172,9 @@ export async function copyText(text) {
 }
 
 /** Ссылка для шаринга: /m/<id> или /t/<id> — страница с превью для мессенджеров, затем редирект в приложение */
+/** Публичная ссылка на личную страницу: /u/<ник> (с превью) или, пока ника нет, прямой хэш-маршрут */
+export const profileUrl = (a) => a.handle ? `${location.origin}/u/${encodeURIComponent(a.handle)}` : `${location.origin}/#/author?id=${a.id}`;
+
 export const shareUrl = (type, id) => `${location.origin}/${type === 'mix' ? 'm' : 't'}/${encodeURIComponent(id)}`;
 
 export function shareLink({ title, text, url, item, type }) {

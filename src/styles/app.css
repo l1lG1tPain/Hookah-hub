@@ -768,3 +768,23 @@ body:has(.sheet.open) .toasts { top: calc(16px + env(safe-area-inset-top)); bott
 .updbar { position: fixed; left: 12px; right: 12px; bottom: calc(76px + env(safe-area-inset-bottom)); z-index: 90; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; background: var(--surface-3); border: 1px solid var(--line-2); border-radius: var(--r); box-shadow: 0 8px 24px rgba(0,0,0,.35); font-size: 14px; max-width: 520px; margin: 0 auto; }
 .updbar__txt b { color: var(--accent-2); font-variant-numeric: tabular-nums; }
 @media (min-width: 860px) { .updbar { bottom: 20px; } }
+
+/* ---------------- личная страница и QR ---------------- */
+.author__handle { margin: 4px 0 0; font-weight: 700; color: var(--accent); }
+.author__bio { margin: 8px 0 0; color: var(--text-2); max-width: 520px; }
+.author__actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.me__handle { color: var(--accent); font-weight: 700; margin-top: 2px; }
+.me__bio { color: var(--text-2); font-size: 14px; margin-top: 4px; }
+.mypage { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.mypage__txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.mypage__txt span { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.mypage__btns { display: flex; gap: 8px; }
+.field { display: flex; flex-direction: column; gap: 6px; }
+textarea.input { resize: vertical; min-height: 76px; font: inherit; }
+.pshare { display: flex; flex-direction: column; gap: 14px; align-items: stretch; }
+.pshare__card { aspect-ratio: 3 / 4; max-height: 52vh; margin: 0 auto; border-radius: 18px; overflow: hidden; background: var(--surface-2); box-shadow: 0 10px 30px rgba(0, 0, 0, .35); display: grid; place-items: center; color: var(--muted); }
+.pshare__card img, .pshare__card .skel { width: 100%; height: 100%; display: block; object-fit: contain; }
+.pshare__url { text-align: center; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+.pshare__btns { display: flex; gap: 8px; flex-wrap: wrap; }
+.pshare__btns .btn--lg { flex: 1 1 100%; }
+.pshare__btns .btn:not(.btn--lg) { flex: 1; }
